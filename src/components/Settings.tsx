@@ -481,6 +481,21 @@ function Data() {
         </Row>
       </Group>
 
+      <Group title="Demo data" description="Try The Quad with a realistic team before entering your own.">
+        <Row label="Load demo team" description="Adds a separate workspace with 10 designers, ~44 projects, two plans, PTO, on-call and milestones. Your data isn’t touched.">
+          <button
+            className="btn sm"
+            onClick={() => {
+              state.loadDemo();
+              navigate({ settings: null, view: 'home', project: null, page: false, designer: null });
+              toast('Demo workspace loaded', { tone: 'success' });
+            }}
+          >
+            <Sparkles size={14} /> Load demo
+          </button>
+        </Row>
+      </Group>
+
       <Group title="Danger zone" description="These can’t be undone. Export a backup first if you might need the data again." tone="danger">
         <Row label={`Clear ${quarterLabel(q)}`} description="Removes every project and plan in this quarter for the current workspace. Disruptions are kept.">
           <button

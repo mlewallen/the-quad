@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowRight, ChevronLeft, ChevronRight, Copy, FileText, Moon, PanelLeftClose, Plus, Search, Settings, Upload } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, Copy, FileText, Moon, PanelLeftClose, Plus, Search, Settings, Sparkles, Upload } from 'lucide-react';
 import { useStore } from '../store';
 import { navigate, openDesigner, openProject, useActivePlan, useDesignerMap, useDesigners, useEntries, useWorkspace, VIEWS } from '../hooks';
 import { toast, useFeedback } from '../feedback';
@@ -71,6 +71,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       { id: 'q:prev', group: 'Actions', label: 'Previous quarter', icon: <ChevronLeft size={16} />, run: () => s.setQuarter(useStore.getState().currentQuarter - 1) },
       { id: 'theme', group: 'Actions', label: 'Toggle dark mode', icon: <Moon size={16} />, keywords: 'theme light', run: () => s.updateSettings({ theme: document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark' }) },
       { id: 'sidebar', group: 'Actions', label: 'Toggle sidebar', hint: '[', icon: <PanelLeftClose size={16} />, run: () => s.updateSettings({ sidebarCollapsed: !useStore.getState().settings.sidebarCollapsed }) },
+      { id: 'demo', group: 'Actions', label: 'Load demo team (10 designers)', icon: <Sparkles size={16} />, keywords: 'sample example data stress', run: () => { s.loadDemo(); navigate({ view: 'home', designer: null }); toast('Demo workspace loaded', { tone: 'success' }); } },
       { id: 'import', group: 'Actions', label: 'Import from spreadsheet', icon: <Upload size={16} />, keywords: 'csv sheets', run: () => navigate({ settings: 'import' }) },
       { id: 'settings', group: 'Actions', label: 'Open settings', icon: <Settings size={16} />, run: () => navigate({ settings: 'appearance' }) },
       ...entries.map((e) => ({

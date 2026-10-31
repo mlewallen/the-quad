@@ -6,6 +6,7 @@ import { balance } from './balancer';
 import { parseDelimited } from './csv';
 import { quarterForDate, quarterStartAbsWeek, quarterStartUtc } from './quarters';
 import { migrate } from '../store';
+import { buildDemo } from './demo';
 import type { Project, Schedule } from '../types';
 
 const project = (id: string, extra: Partial<Project> = {}): Project => ({
@@ -119,5 +120,30 @@ describe('terminology migration', () => {
     const s = migrate(v3 as never, 3);
     expect(s.workspaces[0].config.labels).toMatchObject({ initiative: 'Project', initiatives: 'Projects' });
     expect(s.workspaces[1].config.labels).toMatchObject({ initiative: 'Epic', initiatives: 'Epics' });
+  });
+});
+
+describe('demo data', () => {
+  it('builds a 10-designer workspace with two plans and some unassigned work', () => {
+    let n = 0;
+    const demo = buildDemo(2027 * 4 + 3, 1, () => `id${n++}`);
+    expect(demo.workspace.designers).toHaveLength(10);
+    expect(demo.projects.length).toBeGreaterThanOrEqual(40);
+    expect(demo.plans).toHaveLength(3);
+    const a = Object.values(demo.plans[0].schedules);
+    // This quarter should be busy but not absurd: average load across the team stays near capacity.
+    const q = 2027 * 4 + 3;
+    const qs = quarterStartAbsWeek(q, 1);
+    const entries = demo.projects.filter((p) => p.quarter === q).map((project) => ({ project, schedule: demo.plans[0].schedules[project.id] }));
+    const load = computeLoad(entries, demo.disruptions, demo.workspace.designers.map((d) => d.id), qs, 13, 1);
+    const avg = Object.values(load).flat().reduce((s, w) => s + w.total, 0) / (13 * 10);
+    expect(avg).toBeGreaterThan(55);
+    expect(avg).toBeLessThan(100);
+    const overloaded = Object.values(load).filter((w) => w.some((x) => x.total > 100.5)).length;
+    expect(overloaded).toBeGreaterThan(0);
+    expect(overloaded).toBeLessThan(8);
+    expect(a.filter((s) => !s.designerId).length).toBeGreaterThan(0);
+    expect(a.filter((s) => s.confirmed).length).toBeGreaterThan(10);
+    expect(demo.disruptions.length).toBeGreaterThan(5);
   });
 });

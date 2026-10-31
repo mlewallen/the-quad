@@ -7,6 +7,7 @@ import { DEFAULT_SETTINGS, DESIGNER_COLORS, defaultConfig } from './lib/defaults
 import { currentQuarter } from './lib/quarters';
 import { defaultAllocation, recommendedDuration } from './lib/sizing';
 import { celebrationTitle, type CelebrationId } from './lib/celebrations';
+import { buildDemo } from './lib/demo';
 
 export const STORAGE_KEY = 'the-quad';
 export const STATE_VERSION = 4;
@@ -42,6 +43,8 @@ interface Actions {
     designers: { name: string; color: string }[];
     initiatives: { name: string; designerIndex: number | null; size: Size }[];
   }): void;
+  /** Add a 10-designer demo workspace for the current quarter and switch to it. */
+  loadDemo(): void;
   setQuarter(q: number): void;
   setActiveWorkspace(id: ID): void;
   createWorkspace(name: string, teamType: TeamType): ID;
@@ -202,6 +205,23 @@ export const useStore = create<Store>()(
             currentQuarter: quarter,
             settings: { ...get().settings, fiscalStartMonth: input.fiscalStartMonth },
             totalPlansCreated: get().totalPlansCreated + 1,
+          });
+        },
+
+        loadDemo() {
+          const s = get();
+          const quarter = s.onboarded ? s.currentQuarter : currentQuarter(s.settings.fiscalStartMonth);
+          const demo = buildDemo(quarter, s.settings.fiscalStartMonth, uid);
+          set({
+            onboarded: true,
+            workspaces: [...s.workspaces, demo.workspace],
+            activeWorkspaceId: demo.workspace.id,
+            projects: [...s.projects, ...demo.projects],
+            plans: [...s.plans, ...demo.plans],
+            disruptions: [...s.disruptions, ...demo.disruptions],
+            activePlan: { ...s.activePlan, [planKey(demo.workspace.id, quarter)]: demo.plans[0].id },
+            currentQuarter: quarter,
+            totalPlansCreated: s.totalPlansCreated + demo.plans.length,
           });
         },
 

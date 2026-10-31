@@ -94,7 +94,12 @@ export default function Onboarding() {
           <div className="col" style={{ gap: 16 }}>
             <div>
               <h1>{hasExisting ? 'Set up another team' : 'Plan your design team’s quarter'}</h1>
-              <p className="muted" style={{ marginTop: 4 }}>Everything stays in this browser. No account needed.</p>
+              <p className="muted" style={{ marginTop: 4 }}>
+                Everything stays in this browser. No account needed.{' '}
+                <button className="link-btn" style={{ color: 'var(--accent)', fontWeight: 500 }} onClick={() => { useStore.getState().loadDemo(); navigate({ view: 'home', project: null, page: false, settings: null, designer: null }, true); }}>
+                  Or explore with a demo team →
+                </button>
+              </p>
             </div>
             <div className="grid3">
               {TEAM_TYPES.map((t) => (

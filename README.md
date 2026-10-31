@@ -11,6 +11,10 @@ npm test           # capacity / curve / balancer / migration unit tests
 npm run build      # typecheck + production build into dist/
 ```
 
+## Demo data
+
+To try the app with a realistic team, use **Settings → Data → Load demo team**, the ⌘K palette ("Load demo team"), or the link on the first onboarding screen. Any of these adds a separate workspace (`src/lib/demo.ts`) with 10 designers, ~27 projects this quarter plus a draft for next quarter, two plan scenarios, PTO, on-call and onboarding. Your own data isn't touched. The data is the same every time it loads, and includes a few overloaded designers and some unassigned work so every view has something to show.
+
 ## How it's organized
 
 | Path | What lives there |
@@ -23,7 +27,7 @@ npm run build      # typecheck + production build into dist/
 | `src/lib/curves.ts` | Flat / front / back / bell / custom allocation curves; custom curves resample when duration changes |
 | `src/lib/sizing.ts` | Size profiles (effort weeks by work type × S/M/L/XL) and the duration recommendation |
 | `src/lib/balancer.ts` | Greedy auto-balancer (even load, priority first, minimize conflicts) |
-| `src/views/*` | Home, Gantt, Allocation, Disruptions, Focus, Manage, Backlog |
+| `src/views/*` | Home (readiness, next steps, capacity heatmap), Gantt, Allocation, Disruptions, Focus, Manage, Backlog, Designer |
 | `src/components/*` | Context bar, project detail, curve editor, onboarding, settings, import |
 
 ## Planning rules worth knowing
