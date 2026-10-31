@@ -36,7 +36,14 @@ export function Popover({
     let top: number;
     let left: number;
     let origin: string;
-    if (side === 'right') [top, left, origin] = [r.top, Math.min(r.right + gap, vw - w - 8), 'left top'];
+    if (side === 'right') {
+      // Near the bottom of the viewport, grow upward from the trigger instead.
+      if (r.top > window.innerHeight / 2) {
+        setStyle({ bottom: (window.innerHeight - r.bottom) / z, left: Math.min(r.right + gap, vw - w - 8) / z, width, zoom: z, transformOrigin: 'left bottom' });
+        return;
+      }
+      [top, left, origin] = [r.top, Math.min(r.right + gap, vw - w - 8), 'left top'];
+    }
     else if (align === 'end') [top, left, origin] = [r.bottom + gap, Math.max(8, r.right - w), 'top right'];
     else [top, left, origin] = [r.bottom + gap, Math.min(r.left, vw - w - 8), 'top left'];
     setStyle({ top: top / z, left: left / z, width, zoom: z, transformOrigin: origin });

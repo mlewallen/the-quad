@@ -1,17 +1,18 @@
 import { motion } from 'motion/react';
 import {
-  CalendarOff, ChartGantt, Check, Layers, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, Focus, Gauge, Inbox, LayoutDashboard,
-  Monitor, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings, Sun, Table2, type LucideIcon,
+  CalendarOff, ChartGantt, Check, ClipboardPaste, Layers, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, Focus, Gauge, Inbox, LayoutDashboard,
+  LogOut, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings, Sun, Table2, UserRound, type LucideIcon,
 } from 'lucide-react';
 import { useStore } from '../store';
 import {
   entriesFor, navigate, openDesigner, openProject, useActivePlan, useDesigners, useEntries, useLoad, useQuarterPlans, useQuarterProjects, useWorkspace, VIEWS, type NavView, type View,
 } from '../hooks';
-import { useFeedback, toast } from '../feedback';
+import { openImporter, useFeedback, toast } from '../feedback';
 import { loadLevel as loadLevelOf, summarize } from '../lib/capacity';
 import { formatDate, quarterLabel, quarterStartUtc } from '../lib/quarters';
 import { spring } from '../lib/motion';
 import { MenuDivider, MenuItem, MenuLabel, Popover } from './Popover';
+import { signOut, useAccount } from '../account';
 
 export const VIEW_ICONS: Record<NavView, LucideIcon> = {
   home: LayoutDashboard,
@@ -101,6 +102,7 @@ export function Sidebar({ view, designerId }: { view: View; designerId: string |
       )}
 
       <div className="sidebar-foot">
+        <UserButton collapsed={collapsed} />
         <button className="nav-item" onClick={() => update({ theme: nextTheme })} title={`Theme: ${theme} (click for ${nextTheme})`}>
           <ThemeIcon size={17} strokeWidth={1.75} className="nav-icon" />
           {!collapsed && <span className="nav-label" style={{ textTransform: 'capitalize' }}>{theme} theme</span>}
@@ -116,6 +118,37 @@ export function Sidebar({ view, designerId }: { view: View; designerId: string |
         </button>
       </div>
     </motion.aside>
+  );
+}
+
+function UserButton({ collapsed }: { collapsed: boolean }) {
+  const account = useAccount((s) => s.account);
+  if (!account) return null;
+  return (
+    <Popover
+      side="right"
+      width={240}
+      trigger={({ toggle, open }) => (
+        <button className={`nav-item user-item ${open ? 'on' : ''}`} onClick={toggle} title={collapsed ? account.email : undefined} aria-haspopup="menu" aria-expanded={open}>
+          <span className="nav-avatar user-avatar">{account.name[0]?.toUpperCase()}</span>
+          {!collapsed && (
+            <span className="col" style={{ gap: 0, minWidth: 0, flex: 1, textAlign: 'left' }}>
+              <span className="ellipsis small" style={{ fontWeight: 600, color: 'var(--text)' }}>{account.name}</span>
+              <span className="ellipsis tiny faint" style={{ fontSize: 11 }}>{account.email}</span>
+            </span>
+          )}
+        </button>
+      )}
+    >
+      {(close) => (
+        <>
+          <MenuLabel>Signed in as {account.email}</MenuLabel>
+          <MenuItem icon={<UserRound size={15} />} onSelect={() => { navigate({ settings: 'account' }); close(); }}>Account & email updates</MenuItem>
+          <MenuDivider />
+          <MenuItem icon={<LogOut size={15} />} onSelect={() => { close(); void signOut(); }}>Sign out</MenuItem>
+        </>
+      )}
+    </Popover>
   );
 }
 
@@ -216,15 +249,20 @@ export function TopBar({ view, designerId }: { view: View; designerId: string | 
         <kbd>{MOD}K</kbd>
       </button>
 
-      <button
-        className="btn primary"
-        onClick={() => {
-          const [id] = addInitiatives([{ name: `New ${label.toLowerCase()}` }]);
-          if (id) openProject(id);
-        }}
-      >
-        <Plus size={16} /> {label}
-      </button>
+      <div className="split-btn">
+        <button
+          className="btn primary"
+          onClick={() => {
+            const [id] = addInitiatives([{ name: `New ${label.toLowerCase()}` }]);
+            if (id) openProject(id);
+          }}
+        >
+          <Plus size={16} /> {label}
+        </button>
+        <button className="btn primary icon" title="Add many: paste, upload or import" aria-label="Add many projects" onClick={() => openImporter()}>
+          <ClipboardPaste size={16} />
+        </button>
+      </div>
     </header>
   );
 }

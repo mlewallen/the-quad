@@ -2,17 +2,18 @@ import { useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   BadgeCheck, Building2, Database, Download, Layers, Lock, Maximize2, Monitor, Moon, PanelRight, Palette, PartyPopper, Pipette, Play,
-  Plus, RotateCcw, Sparkles, SquareStack, Sun, Trash2, Trophy, Upload, Users, X, type LucideIcon,
+  LogOut, Mail, Plus, RotateCcw, Sparkles, SquareStack, Sun, Trash2, Trophy, Upload, UserRound, Users, X, type LucideIcon,
 } from 'lucide-react';
 import { confirmDialog, toast } from '../feedback';
-import { STORAGE_KEY, useStore } from '../store';
+import { storageKey, useStore } from '../store';
 import { entriesFor, navigate, useActivePlan, useQuarterProjects, useWorkspace } from '../hooks';
 import type { FieldLabels, PersistedState, TeamType, ThemeMode } from '../types';
 import { ACCENT_PRESETS, TEAM_TYPES } from '../lib/defaults';
 import { CELEBRATIONS, type CelebrationId } from '../lib/celebrations';
 import { MONTHS, formatDate, quarterLabel } from '../lib/quarters';
 import { ease, staggerChild, staggerParent } from '../lib/motion';
-import Import from './Import';
+import { ImportFlow } from './Importer';
+import { listSignups, signOut, signupsCsv, updateAccount, useAccount } from '../account';
 import { ListEditor, Slider, Switch, TextInput } from './ui';
 
 interface SectionDef {
@@ -23,11 +24,12 @@ interface SectionDef {
 }
 
 const SECTIONS: SectionDef[] = [
+  { id: 'account', label: 'Account', icon: UserRound, description: 'Who’s signed in, and whether you get product update emails.' },
   { id: 'appearance', label: 'Appearance', icon: Palette, description: 'How The Quad looks and behaves in this browser.' },
   { id: 'team', label: 'Team', icon: Users, description: 'The designers you plan for in this workspace.' },
   { id: 'workspace', label: 'Workspace', icon: Building2, description: 'Workspace details, workflow options and the words your team uses.' },
   { id: 'celebrations', label: 'Celebrations', icon: Trophy, description: 'Small moments of delight, and the ones you have left to find.' },
-  { id: 'import', label: 'Import', icon: Upload, description: 'Bring projects in from a spreadsheet, CSV file or Google Sheet.' },
+  { id: 'import', label: 'Integrations', icon: Upload, description: 'Paste a spreadsheet, drop a file, or bring in exports from Jira, Asana, ServiceNow and Linear. Re-importing updates matching projects.' },
   { id: 'data', label: 'Data', icon: Database, description: 'Back up, restore, or clear the data stored in this browser.' },
 ];
 
@@ -59,11 +61,12 @@ export default function SettingsPanel({ section }: { section: string }) {
               <h2>{active.label}</h2>
               <p>{active.description}</p>
             </header>
+            {active.id === 'account' && <AccountSettings />}
             {active.id === 'appearance' && <Appearance />}
             {active.id === 'team' && <Team />}
             {active.id === 'workspace' && <WorkspaceSettings />}
             {active.id === 'celebrations' && <Celebrations />}
-            {active.id === 'import' && <Group><div className="set-pad"><Import /></div></Group>}
+            {active.id === 'import' && <Group><div className="set-pad"><ImportFlow onDone={() => navigate({ settings: null })} /></div></Group>}
             {active.id === 'data' && <Data />}
           </motion.div>
         </AnimatePresence>
@@ -115,6 +118,50 @@ function Segmented<T extends string>({ value, options, onChange, label }: { valu
 }
 
 /* ---------- sections ---------- */
+
+function AccountSettings() {
+  const account = useAccount((s) => s.account)!;
+  const signups = listSignups();
+  const endpoint = import.meta.env.VITE_SIGNUP_ENDPOINT;
+  const download = () => {
+    const blob = new Blob([signupsCsv()], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'the-quad-email-list.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  return (
+    <>
+      <Group title="Profile" description="Accounts are local for now: no password, and data stays in this browser.">
+        <Row label="Name" description="Shown in the sidebar.">
+          <div style={{ width: 240 }}><TextInput value={account.name} onCommit={(v) => v.trim() && updateAccount({ name: v.trim() })} /></div>
+        </Row>
+        <Row label="Email" description="Your plans are saved under this email on this device.">
+          <span className="small mono">{account.email}</span>
+        </Row>
+      </Group>
+      <Group title="Email updates">
+        <Row label="Product updates" description="Occasional emails about new features. Turn off anytime.">
+          <Switch checked={account.marketingOptIn} onChange={(v) => { updateAccount({ marketingOptIn: v }); toast(v ? 'You’re on the update list' : 'Unsubscribed from updates', { tone: v ? 'success' : 'neutral' }); }} label="Product updates" />
+        </Row>
+      </Group>
+      <Group
+        title="Email list on this device"
+        description={endpoint ? <>New signups are also sent to <span className="mono">{endpoint}</span>.</> : <>Signups are stored locally. Set <span className="mono">VITE_SIGNUP_ENDPOINT</span> to send them to a mailing-list service.</>}
+      >
+        <Row label={`${signups.length} signup${signups.length === 1 ? '' : 's'}`} description="Everyone who opted in from the sign-in screen, the waitlist form or this page.">
+          <button className="btn sm" disabled={!signups.length} onClick={download}><Mail size={14} /> Export CSV</button>
+        </Row>
+      </Group>
+      <Group title="Session">
+        <Row label="Sign out" description="Returns to the sign-in screen. Your data stays saved for next time.">
+          <button className="btn sm" onClick={() => { navigate({ settings: null }); void signOut(); }}><LogOut size={14} /> Sign out</button>
+        </Row>
+      </Group>
+    </>
+  );
+}
 
 function Appearance() {
   const s = useStore((st) => st.settings);
@@ -444,7 +491,7 @@ function Data() {
   const q = state.currentQuarter;
 
   const exportJson = () => {
-    const raw = localStorage.getItem(STORAGE_KEY) ?? '{}';
+    const raw = localStorage.getItem(storageKey()) ?? '{}';
     const blob = new Blob([JSON.stringify(JSON.parse(raw), null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);

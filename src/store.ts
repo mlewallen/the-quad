@@ -8,8 +8,10 @@ import { currentQuarter } from './lib/quarters';
 import { defaultAllocation, recommendedDuration } from './lib/sizing';
 import { celebrationTitle, type CelebrationId } from './lib/celebrations';
 import { buildDemo } from './lib/demo';
+import { currentDataKey } from './lib/session';
 
-export const STORAGE_KEY = 'the-quad';
+/** The current account's storage key (see lib/session.ts). Read at call time; it changes on sign-in. */
+export const storageKey = () => useStore.persist.getOptions().name ?? currentDataKey();
 export const STATE_VERSION = 4;
 
 export const uid = () => crypto.randomUUID().replace(/-/g, '').slice(0, 12);
@@ -31,6 +33,15 @@ export interface NewInitiative {
   priority?: Project['priority'];
   startWeek?: number;
   extra?: Partial<Project>;
+  /** Schedule fields to apply in the active plan (designerId/startWeek are also accepted above). */
+  schedule?: Partial<Schedule>;
+}
+
+/** One update to an existing project, produced by the ingest pipeline. */
+export interface ProjectUpdate {
+  id: ID;
+  project: Partial<Project>;
+  schedule: Partial<Schedule>;
 }
 
 interface Actions {
@@ -60,6 +71,8 @@ interface Actions {
   renamePlan(id: ID, name: string): void;
   deletePlan(id: ID): void;
   addInitiatives(items: NewInitiative[]): ID[];
+  /** Create and update projects in one step (imports, integrations). */
+  applyImport(create: NewInitiative[], update: ProjectUpdate[]): { created: ID[]; updated: number };
   updateProject(id: ID, patch: Partial<Project>): void;
   updateSchedule(projectId: ID, patch: Partial<Schedule>, planId?: ID): void;
   bulkUpdate(ids: ID[], project: Partial<Project>, schedule: Partial<Schedule>): void;
@@ -388,16 +401,35 @@ export const useStore = create<Store>()(
               created.forEach((proj, i) => {
                 const sched = defaultSchedule(w, proj);
                 if (p.id === active) {
-                  sched.designerId = items[i].designerId ?? null;
-                  sched.startWeek = items[i].startWeek ?? 0;
+                  Object.assign(sched, items[i].schedule ?? {});
+                  sched.designerId = items[i].designerId ?? sched.designerId ?? null;
+                  sched.startWeek = items[i].startWeek ?? sched.startWeek;
                 }
-                schedules[proj.id] = sched;
+                schedules[proj.id] = normalize(sched);
               });
               return { ...p, schedules };
             }),
           }));
           if (quarterWasEmpty) get().celebrate('first-initiative', 'First project of the quarter — off to a good start');
           return created.map((p) => p.id);
+        },
+
+        applyImport(create, update) {
+          const created = create.length ? get().addInitiatives(create) : [];
+          if (update.length) {
+            const byId = new Map(update.map((u) => [u.id, u]));
+            const pid = activePlanId();
+            set((st) => ({
+              projects: st.projects.map((p) => (byId.has(p.id) ? { ...p, ...byId.get(p.id)!.project } : p)),
+              plans: st.plans.map((p) => {
+                if (p.id !== pid) return p;
+                const schedules = { ...p.schedules };
+                for (const u of update) if (schedules[u.id] && Object.keys(u.schedule).length) schedules[u.id] = normalize({ ...schedules[u.id], ...u.schedule });
+                return { ...p, schedules };
+              }),
+            }));
+          }
+          return { created, updated: update.length };
         },
 
         updateProject(id, patch) {
@@ -510,7 +542,7 @@ export const useStore = create<Store>()(
       }
     },
     {
-      name: STORAGE_KEY,
+      name: currentDataKey(),
       version: STATE_VERSION,
       partialize: ({ celebration: _c, ...rest }) =>
         Object.fromEntries(Object.entries(rest).filter(([, v]) => typeof v !== 'function')) as unknown as Store,
