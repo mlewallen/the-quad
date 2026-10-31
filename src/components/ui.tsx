@@ -1,13 +1,16 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { ChevronRight, type LucideIcon } from 'lucide-react';
 import type { Designer } from '../types';
 import { loadLevel } from '../lib/capacity';
+import { dialogIn, ease } from '../lib/motion';
 
 export function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((s) => s[0]!.toUpperCase()).join('') || '?';
 }
 
 export function Avatar({ designer, size }: { designer?: Designer; size?: 'lg' }) {
-  if (!designer) return <span className={`avatar ${size ?? ''}`} style={{ background: 'var(--surface-3)', color: 'var(--text-3)' }}>–</span>;
+  if (!designer) return <span className={`avatar empty-avatar ${size ?? ''}`}>–</span>;
   return (
     <span className={`avatar ${size ?? ''}`} style={{ background: designer.color }} title={designer.name}>
       {initials(designer.name)}
@@ -21,24 +24,32 @@ export function PriorityChip({ p }: { p: string }) {
 
 export function LoadChip({ pct }: { pct: number }) {
   const lvl = loadLevel(pct);
-  return <span className={`chip ${lvl === 'idle' ? '' : lvl}`}>{Math.round(pct)}%</span>;
+  return <span className={`chip load ${lvl === 'idle' ? '' : lvl}`}>{Math.round(pct)}%</span>;
 }
 
+/** Overlay + dialog with spring entrance. Must be rendered inside <AnimatePresence>. */
 export function Modal({ onClose, children, wide }: { onClose: () => void; children: ReactNode; wide?: boolean }) {
   useEscape(onClose);
   return (
-    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal ${wide ? 'wide' : ''}`} role="dialog" aria-modal="true">
+    <motion.div
+      className="overlay"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, transition: { duration: 0.14 } }}
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <motion.div className={`modal ${wide ? 'wide' : ''}`} role="dialog" aria-modal="true" variants={dialogIn} initial="initial" animate="animate" exit="exit">
         {children}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
 export function useEscape(fn: () => void) {
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') fn();
+      // Let the innermost layer (confirm dialog, palette, popover) handle Escape first.
+      if (e.key === 'Escape' && !document.querySelector('[role=alertdialog], .palette, .popover')) fn();
     };
     window.addEventListener('keydown', on);
     return () => window.removeEventListener('keydown', on);
@@ -58,12 +69,24 @@ export function Section({ title, children, defaultOpen = true, aside }: { title:
   return (
     <div className="section">
       <button className={`section-head ${open ? 'open' : ''}`} onClick={toggle} aria-expanded={open}>
-        <span className="chev">▸</span>
+        <ChevronRight size={15} className="chev" />
         {title}
         <span className="spacer" />
         {aside}
       </button>
-      {open && <div className="section-body">{children}</div>}
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1, transition: { duration: 0.24, ease: ease.out } }}
+            exit={{ height: 0, opacity: 0, transition: { duration: 0.16, ease: ease.in } }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="section-body">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -122,12 +145,14 @@ export function ListEditor({ items, onChange, placeholder }: { items: string[]; 
   return (
     <div className="col">
       <div className="list-editor">
-        {items.map((it) => (
-          <span key={it} className="chip">
-            {it}
-            <button aria-label={`Remove ${it}`} onClick={() => onChange(items.filter((x) => x !== it))}>×</button>
-          </span>
-        ))}
+        <AnimatePresence initial={false}>
+          {items.map((it) => (
+            <motion.span key={it} className="chip" layout initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}>
+              {it}
+              <button aria-label={`Remove ${it}`} onClick={() => onChange(items.filter((x) => x !== it))}>×</button>
+            </motion.span>
+          ))}
+        </AnimatePresence>
       </div>
       <div className="row">
         <input className="input sm" value={draft} placeholder={placeholder ?? 'Add…'} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
@@ -143,7 +168,15 @@ export function Sparkline({ values, height = 56, onBarTitle }: { values: number[
     <div className="spark" style={{ height }}>
       <div className="cap" style={{ bottom: `${(100 / max) * 100}%` }} />
       {values.map((v, i) => (
-        <div key={i} className={`b lvl-${loadLevel(v)}`} style={{ height: `${Math.max(2, (v / max) * 100)}%` }} title={onBarTitle?.(i) ?? `${Math.round(v)}%`} />
+        <motion.div
+          key={i}
+          className={`b lvl-${loadLevel(v)}`}
+          initial={{ scaleY: 0 }}
+          animate={{ scaleY: 1 }}
+          transition={{ delay: i * 0.015, duration: 0.35, ease: ease.out }}
+          style={{ height: `${Math.max(2, (v / max) * 100)}%`, transformOrigin: 'bottom' }}
+          title={onBarTitle?.(i) ?? `${Math.round(v)}%`}
+        />
       ))}
     </div>
   );
@@ -157,4 +190,20 @@ export function HealthStrip({ values }: { values: number[] }) {
       ))}
     </div>
   );
+}
+
+export function EmptyState({ icon: Icon, title, children, action }: { icon: LucideIcon; title: string; children?: ReactNode; action?: ReactNode }) {
+  return (
+    <motion.div className="empty-state" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+      <span className="empty-icon"><Icon size={20} strokeWidth={1.75} /></span>
+      <b>{title}</b>
+      {children && <p className="muted small">{children}</p>}
+      {action}
+    </motion.div>
+  );
+}
+
+/** Toolbar row at the top of a view (titles now live in the top bar). */
+export function Toolbar({ children }: { children: ReactNode }) {
+  return <div className="toolbar">{children}</div>;
 }

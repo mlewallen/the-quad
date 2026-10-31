@@ -50,7 +50,7 @@ export default function CurveEditor({
           </button>
         ))}
       </div>
-      <div className="curve-editor" ref={ref} onPointerDown={onPointerDown} style={{ paddingTop: 18 }}>
+      <div className="curve-editor" ref={ref} onPointerDown={onPointerDown} style={{ paddingTop: 20 }} role="img" aria-label={`Weekly allocation: ${factors.map((f) => Math.round(f * max)).join(', ')}%`}>
         {factors.map((f, i) => (
           <div key={i} className="bar" style={{ height: `${Math.max(2, f * 100)}%`, background: color }} title={`Week ${i + 1}: ${Math.round(f * max)}%`}>
             {duration <= 16 && <span>{Math.round(f * max)}</span>}

@@ -4,6 +4,7 @@ import { useDesigners, useWorkspace } from '../hooks';
 import type { Priority, Project, Size } from '../types';
 import { PRIORITIES, SIZES } from '../types';
 import { parseDelimited, sheetsCsvUrl } from '../lib/csv';
+import { toast } from '../feedback';
 
 type Target =
   | '' | 'name' | 'designer' | 'size' | 'priority' | 'workType' | 'ticket' | 'reference'
@@ -108,7 +109,8 @@ export default function Import() {
 
   const confirmImport = () => {
     addInitiatives(records.map((r) => ({ name: r.name, designerId: r.designerId, size: r.size, priority: r.priority, workType: r.workType, extra: r.extra })));
-    setStatus(`Imported ${records.length} item${records.length === 1 ? '' : 's'} into the current quarter.`);
+    toast(`Imported ${records.length} item${records.length === 1 ? '' : 's'} into the current quarter`, { tone: 'success' });
+    setStatus(null);
     setStage('input');
     setText('');
     setMapping(null);

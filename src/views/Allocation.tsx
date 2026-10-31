@@ -1,8 +1,11 @@
+import { motion } from 'motion/react';
+import { Users } from 'lucide-react';
 import { useStore } from '../store';
 import { openProject, useDesigners, useEntries, useLoad, useQuarterStart } from '../hooks';
 import { summarize } from '../lib/capacity';
 import { formatAbsWeek, formatWeekRange } from '../lib/quarters';
-import { Avatar, LoadChip, Sparkline } from '../components/ui';
+import { staggerChild, staggerParent } from '../lib/motion';
+import { Avatar, EmptyState, LoadChip, Sparkline } from '../components/ui';
 
 export default function Allocation() {
   const designers = useDesigners();
@@ -11,24 +14,25 @@ export default function Allocation() {
   const qStart = useQuarterStart();
   const updateSchedule = useStore((s) => s.updateSchedule);
 
+  if (!designers.length) return <div className="view"><EmptyState icon={Users} title="No designers yet">Add designers in Settings → Team.</EmptyState></div>;
+
   return (
     <div className="view">
-      <div className="view-head">
-        <h1>Allocation</h1>
-        <span className="muted small">Weekly load per designer. Drag a slider to adjust max allocation.</span>
-      </div>
-      <div className="cards">
+      <motion.div className="cards" variants={staggerParent} initial="initial" animate="animate">
         {designers.map((d) => {
           const weeks = load[d.id] ?? [];
           const s = summarize(weeks);
           const mine = entries.filter((e) => e.schedule.designerId === d.id).sort((a, b) => a.schedule.startWeek - b.schedule.startWeek);
           return (
-            <div key={d.id} className="card card-pad col" style={{ gap: 10 }}>
+            <motion.div key={d.id} className="card card-pad col" style={{ gap: 12 }} variants={staggerChild}>
               <div className="row">
                 <Avatar designer={d} size="lg" />
                 <div className="col" style={{ gap: 0 }}>
                   <b>{d.name}</b>
-                  <span className="tiny muted">{mine.length} assigned · peak {Math.round(s.peak)}%{s.over ? ` · ${s.over} over` : ''}</span>
+                  <span className="tiny faint">
+                    {mine.length} assigned · peak {Math.round(s.peak)}%
+                    {s.over ? <span style={{ color: 'var(--over)' }}> · {s.over} wks over</span> : ''}
+                  </span>
                 </div>
                 <span className="spacer" />
                 <LoadChip pct={s.avg} />
@@ -41,11 +45,11 @@ export default function Allocation() {
                 {mine.map((e) => (
                   <div key={e.project.id} className="alloc-item">
                     <div className="row">
-                      <a href="#" className="ellipsis small" style={{ fontWeight: 500 }} onClick={(ev) => { ev.preventDefault(); openProject(e.project.id); }}>
+                      <a href="#" className="ellipsis small" style={{ fontWeight: 500, color: 'var(--text)' }} onClick={(ev) => { ev.preventDefault(); openProject(e.project.id); }}>
                         {e.project.name}
                       </a>
                       <span className="spacer" />
-                      <span className="mono">{e.schedule.allocation}%</span>
+                      <span className="small num" style={{ fontWeight: 600 }}>{e.schedule.allocation}%</span>
                     </div>
                     <input
                       type="range"
@@ -61,11 +65,10 @@ export default function Allocation() {
                 ))}
                 {!mine.length && <span className="small faint">Nothing assigned this quarter.</span>}
               </div>
-            </div>
+            </motion.div>
           );
         })}
-      </div>
-      {!designers.length && <div className="empty">Add designers in Settings → Team.</div>}
+      </motion.div>
     </div>
   );
 }

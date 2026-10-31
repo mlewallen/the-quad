@@ -130,6 +130,7 @@ export interface Settings {
   ganttWeeksBefore: number;
   ganttWeeksAfter: number;
   ganttMode: 'bars' | 'stacked';
+  sidebarCollapsed: boolean;
 }
 
 export interface PersistedState {

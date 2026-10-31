@@ -1,4 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
+import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
+import { ChartArea, ChartGantt, Users } from 'lucide-react';
+import { readableOn, spring } from '../lib/motion';
 import { useStore } from '../store';
 import {
   openProject, useDesignerMap, useDesigners, useEntries, useLoad, useQuarterStart, useWorkspace, useWorkspaceDisruptions,
@@ -9,7 +12,7 @@ import type { Entry, WeekLoad } from '../lib/capacity';
 import { summarize } from '../lib/capacity';
 import { weeklyAllocation } from '../lib/curves';
 import { formatAbsWeek, formatWeekRange, utcToAbsWeek } from '../lib/quarters';
-import { Avatar, HealthStrip, LoadChip, PriorityChip } from '../components/ui';
+import { Avatar, EmptyState, HealthStrip, LoadChip, PriorityChip, Toolbar } from '../components/ui';
 
 interface DragState {
   id: ID;
@@ -138,15 +141,13 @@ export default function Gantt() {
 
   return (
     <div className="view" style={{ paddingBottom: 40 }}>
-      <div className="view-head">
-        <h1>Gantt</h1>
-        <div className="segmented">
-          <button className={settings.ganttMode === 'bars' ? 'on' : ''} onClick={() => updateSettings({ ganttMode: 'bars' })}>Bars</button>
-          <button className={settings.ganttMode === 'stacked' ? 'on' : ''} onClick={() => updateSettings({ ganttMode: 'stacked' })}>Stacked</button>
+      <Toolbar>
+        <div className="segmented" role="radiogroup" aria-label="Display">
+          <button role="radio" aria-checked={settings.ganttMode === 'bars'} className={settings.ganttMode === 'bars' ? 'on' : ''} onClick={() => updateSettings({ ganttMode: 'bars' })}><ChartGantt size={14} /> Bars</button>
+          <button role="radio" aria-checked={settings.ganttMode === 'stacked'} className={settings.ganttMode === 'stacked' ? 'on' : ''} onClick={() => updateSettings({ ganttMode: 'stacked' })}><ChartArea size={14} /> Stacked</button>
         </div>
-        <span className="spacer" />
         <div className="row small">
-          <span className="muted">Show</span>
+          <span className="faint">Window</span>
           <select className="select sm" style={{ width: 'auto' }} value={before} onChange={(e) => updateSettings({ ganttWeeksBefore: Number(e.target.value) })} aria-label="Weeks before quarter">
             {[0, 2, 4, 8, 13].map((w) => <option key={w} value={w}>{w} wks before</option>)}
           </select>
@@ -154,10 +155,13 @@ export default function Gantt() {
             {[0, 2, 4, 8, 13].map((w) => <option key={w} value={w}>{w} wks after</option>)}
           </select>
         </div>
+        <span className="spacer" />
         <Legend />
-      </div>
+      </Toolbar>
 
-      <div className="card" style={{ overflow: 'auto' }}>
+      {!designers.length && <EmptyState icon={Users} title="No designers yet">Add designers in Settings → Team to start planning.</EmptyState>}
+      <div className="card" style={{ overflow: 'auto', display: designers.length ? undefined : 'none' }}>
+        <LayoutGroup>
         <div className="gantt" ref={trackRef}>
           <div className="gantt-header">
             <div className="gantt-label" style={{ justifyContent: 'flex-end' }}>
@@ -197,7 +201,7 @@ export default function Gantt() {
                       <span>peak</span> <LoadChip pct={stats.peak} />
                     </div>
                   ) : (
-                    <span className="tiny faint">Drag onto a designer to assign</span>
+                    <span className="tiny faint">Drag a bar onto a designer to assign it</span>
                   )}
                 </div>
                 <div className="gantt-track">
@@ -214,16 +218,33 @@ export default function Gantt() {
                           const s = e.schedule;
                           const p = pos(qStart + s.startWeek, s.duration);
                           if (!p.visible) return null;
-                          const color = designer?.color ?? 'var(--text-3)';
+                          const color = designer?.color ?? '#8a8a94';
                           const dragging = drag?.id === e.project.id;
                           return (
-                            <div
+                            <motion.div
                               key={e.project.id}
+                              // Shared layout id lets a bar glide between rows and positions
+                              // (plan switches, keyboard nudges, lane repacking). Disabled while
+                              // any drag is live so the bar tracks the pointer 1:1.
+                              layoutId={drag ? undefined : `bar-${e.project.id}`}
+                              layout={drag ? false : 'position'}
+                              transition={spring.settle}
+                              initial={{ opacity: 0, scaleX: 0.85 }}
+                              animate={{ opacity: 1, scaleX: 1, scale: dragging && drag?.kind === 'move' && drag.moved ? 1.02 : 1 }}
                               className={`gantt-bar ${s.confirmed ? '' : 'unconfirmed'} ${dragging ? 'dragging' : ''}`}
-                              style={{ left: p.left, width: p.width, top: 6 + (lanes.get(e.project.id) ?? 0) * LANE_H, background: color }}
+                              style={{
+                                left: p.left, width: p.width, top: 6 + (lanes.get(e.project.id) ?? 0) * LANE_H, background: color,
+                                color: readableOn(color), transformOrigin: 'left center',
+                                transition: drag ? 'box-shadow .2s' : 'width .28s cubic-bezier(.16,1,.3,1), box-shadow .2s',
+                              }}
                               onPointerDown={(ev) => onBarPointerDown(ev, e, 'move')}
                               onPointerMove={(ev) => !drag && setHover({ x: ev.clientX, y: ev.clientY, entry: e })}
                               onPointerLeave={() => setHover(null)}
+                              onFocus={(ev) => {
+                                const r = ev.currentTarget.getBoundingClientRect();
+                                setHover({ x: r.left, y: r.bottom, entry: e });
+                              }}
+                              onBlur={() => setHover(null)}
                               role="button"
                               tabIndex={0}
                               onKeyDown={(ev) => {
@@ -241,7 +262,7 @@ export default function Gantt() {
                               <span className="name ellipsis">{e.project.name}</span>
                               <span className="pct">{s.allocation}%</span>
                               <span className="handle r" onPointerDown={(ev) => onBarPointerDown(ev, e, 'r')} />
-                            </div>
+                            </motion.div>
                           );
                         })}
                       </div>
@@ -255,11 +276,13 @@ export default function Gantt() {
               </div>
             );
           })}
-          {!designers.length && <div className="empty">Add designers in Settings → Team to start planning.</div>}
         </div>
+        </LayoutGroup>
       </div>
 
-      {hover && <BarTooltip hover={hover} qStart={qStart} designerName={hover.entry.schedule.designerId ? dmap[hover.entry.schedule.designerId]?.name : undefined} />}
+      <AnimatePresence>
+        {hover && <BarTooltip key="tip" hover={hover} qStart={qStart} designerName={hover.entry.schedule.designerId ? dmap[hover.entry.schedule.designerId]?.name : undefined} />}
+      </AnimatePresence>
     </div>
   );
 }
@@ -367,7 +390,13 @@ function BarTooltip({ hover, qStart, designerName }: { hover: Hover; qStart: num
   const { project: p, schedule: s } = hover.entry;
   const left = Math.min(hover.x + 14, window.innerWidth - 300);
   return (
-    <div className="tooltip" style={{ left, top: hover.y + 16 }}>
+    <motion.div
+      className="tooltip"
+      style={{ left, top: hover.y + 16 }}
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0, transition: { duration: 0.14 } }}
+      exit={{ opacity: 0, transition: { duration: 0.08 } }}
+    >
       <div className="t-title">{p.name}</div>
       <div className="t-row"><span>Designer</span><span>{designerName ?? 'Unassigned'}</span></div>
       <div className="t-row"><span>When</span><span>{formatWeekRange(qStart + s.startWeek, s.duration)}</span></div>
@@ -375,8 +404,8 @@ function BarTooltip({ hover, qStart, designerName }: { hover: Hover; qStart: num
       <div className="t-row"><span>Phase</span><span>{s.phase}</span></div>
       <div className="t-row"><span>Priority / size</span><span><PriorityChip p={p.priority} /> {p.size} {p.workType}</span></div>
       {s.milestones.length > 0 && <div className="t-row"><span>Milestones</span><span>{s.milestones.map((m) => m.type).join(', ')}</span></div>}
-      <div className="t-row"><span>Status</span><span>{s.confirmed ? 'Confirmed' : 'Tentative'}</span></div>
-    </div>
+      <div className="t-row"><span>Status</span><span>{s.confirmed ? <span className="chip ok">Confirmed</span> : <span className="chip">Tentative</span>}</span></div>
+    </motion.div>
   );
 }
 

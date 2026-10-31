@@ -1,4 +1,7 @@
 import { useMemo } from 'react';
+import { CalendarRange, Diamond, Maximize2, PanelRight, Plus, SquareStack, Trash2, WandSparkles, X } from 'lucide-react';
+import { confirmDialog, toast } from '../feedback';
+import { readableOn } from '../lib/motion';
 import { uid, useStore } from '../store';
 import {
   closeProject, navigate, useDesignerMap, useDesigners, useEntry, useQuarterStart, useWorkspace, useWorkspaceDisruptions, useWorkspaceEntries,
@@ -39,7 +42,7 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
         <div className="row">
           <h2>Not found</h2>
           <span className="spacer" />
-          <button className="btn icon ghost" onClick={closeProject} aria-label="Close">✕</button>
+          <button className="btn icon ghost" onClick={closeProject} aria-label="Close"><X size={16} /></button>
         </div>
         <p className="muted">This item isn't in the current quarter's active plan. It may belong to another quarter or workspace, or was deleted.</p>
       </div>
@@ -91,15 +94,15 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
           <span className="spacer" />
           <div className="segmented" aria-label="Detail layout">
             {(['panel', 'modal', 'page'] as DetailMode[]).map((m) => (
-              <button key={m} className={mode === m ? 'on' : ''} onClick={() => switchMode(m)} title={`Open as ${m}`} style={{ height: 24, fontSize: 11 }}>
-                {m === 'panel' ? '◧' : m === 'modal' ? '◻' : '⬚'} {m}
+              <button key={m} className={mode === m ? 'on' : ''} onClick={() => switchMode(m)} title={`Open as ${m}`} aria-label={`Open as ${m}`}>
+                {m === 'panel' ? <PanelRight size={14} /> : m === 'modal' ? <SquareStack size={14} /> : <Maximize2 size={14} />}
               </button>
             ))}
           </div>
-          <button className="btn icon ghost sm" onClick={closeProject} aria-label="Close">✕</button>
+          <button className="btn icon ghost sm" onClick={closeProject} aria-label="Close"><X size={16} /></button>
         </div>
         <TextInput className="detail-title" value={p.name} onCommit={(v) => up({ name: v.trim() || p.name })} />
-        <div className="small muted" style={{ marginTop: 2 }}>
+        <div className="small faint" style={{ marginTop: 2 }}>
           {designer ? designer.name : 'Unassigned'} · {formatWeekRange(qStart + s.startWeek, s.duration)} · {s.allocation}% max
         </div>
       </div>
@@ -186,7 +189,7 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
               <input type="range" min={5} max={100} step={5} value={s.allocation} onChange={(e) => us({ allocation: Number(e.target.value) })} />
             </Field>
             <div className="row small muted">
-              <span>📅 {formatWeekRange(qStart + s.startWeek, s.duration)}</span>
+              <span className="row" style={{ gap: 6 }}><CalendarRange size={14} /> {formatWeekRange(qStart + s.startWeek, s.duration)}</span>
               <span className="spacer" />
               <span>{effortWeeks(s.curve, s.duration, s.allocation).toFixed(1)} effort weeks planned</span>
             </div>
@@ -204,7 +207,7 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
               .map((m) => (
                 <div key={m.id} className="col" style={{ gap: 4, paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
                   <div className="row">
-                    <span style={{ width: 9, height: 9, transform: 'rotate(45deg)', background: color, flex: 'none' }} />
+                    <Diamond size={14} style={{ color, flex: 'none' }} fill="currentColor" />
                     <select className="select sm" style={{ width: 'auto' }} value={m.type} onChange={(e) => updMilestone(m.id, { type: e.target.value })}>
                       {!workspace.config.milestoneTypes.includes(m.type) && <option>{m.type}</option>}
                       {workspace.config.milestoneTypes.map((t) => <option key={t}>{t}</option>)}
@@ -215,12 +218,12 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
                       ))}
                     </select>
                     <span className="spacer" />
-                    <button className="btn icon ghost sm" aria-label="Remove milestone" onClick={() => us({ milestones: s.milestones.filter((x) => x.id !== m.id) })}>✕</button>
+                    <button className="btn icon ghost sm" aria-label="Remove milestone" onClick={() => us({ milestones: s.milestones.filter((x) => x.id !== m.id) })}><X size={14} /></button>
                   </div>
                   <TextInput className="input sm" value={m.note} placeholder="Note (optional)" onCommit={(v) => updMilestone(m.id, { note: v })} />
                 </div>
               ))}
-            <button className="btn sm" style={{ alignSelf: 'flex-start' }} onClick={addMilestone}>+ Milestone</button>
+            <button className="btn sm" style={{ alignSelf: 'flex-start' }} onClick={addMilestone}><Plus size={14} /> Milestone</button>
           </Section>
         </div>
 
@@ -235,7 +238,11 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
                 {p.size} {p.workType} ≈ {effortFor(p.workType, p.size)} effort weeks ÷ {s.allocation}% allocation{s.curve.shape !== 'flat' ? ' (adjusted for curve shape)' : ''}.
                 {delta === 0 ? ' Your plan matches.' : delta > 0 ? ` Plan is ${delta} wk${delta > 1 ? 's' : ''} longer.` : ` Plan is ${-delta} wk${delta < -1 ? 's' : ''} shorter — likely under-resourced.`}
               </div>
-              {delta !== 0 && <button className="btn sm primary" onClick={() => us({ duration: recommended })}>Apply</button>}
+              {delta !== 0 && (
+                <button className="btn sm primary" onClick={() => { us({ duration: recommended }); toast(`Duration set to ${recommended} weeks`, { tone: 'success', action: { label: 'Undo', run: () => us({ duration: s.duration }) } }); }}>
+                  <WandSparkles size={14} /> Apply
+                </button>
+              )}
             </div>
             <div className="col" style={{ gap: 4 }}>
               <span className="label">Phase breakdown</span>
@@ -245,8 +252,9 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
                     key={ph.phase}
                     style={{
                       width: `${(ph.weeks / s.duration) * 100}%`,
-                      background: designer?.color ?? 'var(--text-3)',
-                      opacity: ph.phase === s.phase ? 1 : 0.35 + (i / phases.length) * 0.35,
+                      background: ph.phase === s.phase ? designer?.color ?? '#8a8a94' : 'var(--surface-3)',
+                      color: ph.phase === s.phase ? readableOn(designer?.color ?? '#8a8a94') : 'var(--text-2)',
+                      opacity: ph.phase === s.phase ? 1 : 0.6 + (i / phases.length) * 0.4,
                     }}
                     title={`${ph.phase}: ~${ph.weeks.toFixed(1)} wks`}
                   >
@@ -288,15 +296,17 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
             <span className="tiny faint">Metadata is shared across plans; schedule fields belong to the active plan.</span>
             <span className="spacer" />
             <button
-              className="btn sm danger"
-              onClick={() => {
-                if (confirm(`Delete "${p.name}" from every plan?`)) {
+              className="btn sm ghost danger"
+              onClick={async () => {
+                const ok = await confirmDialog({ title: `Delete “${p.name}”?`, body: 'It will be removed from every plan this quarter.', confirmLabel: 'Delete', destructive: true });
+                if (ok) {
                   closeProject();
                   deleteProjects([p.id]);
+                  toast(`Deleted ${p.name}`);
                 }
               }}
             >
-              Delete
+              <Trash2 size={13} /> Delete
             </button>
           </div>
         </div>

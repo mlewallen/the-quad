@@ -1,11 +1,17 @@
 import { useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { ArrowRight, CircleCheck, Scale, Sparkles, Zap, ShieldCheck } from 'lucide-react';
+import { toast } from '../feedback';
+import { staggerChild, staggerParent } from '../lib/motion';
 import { useStore } from '../store';
 import { openProject, useDesignerMap, useDesigners, useEntries, useLoad, useQuarterStart, useWorkspace } from '../hooks';
 import type { ID } from '../types';
 import { WEEKS_PER_QUARTER } from '../types';
 import { balance, STRATEGY_LABELS, type Strategy, type Suggestion } from '../lib/balancer';
 import { formatWeekRange } from '../lib/quarters';
-import { Avatar, LoadChip, PriorityChip } from '../components/ui';
+import { Avatar, EmptyState, LoadChip, PriorityChip, Toolbar } from '../components/ui';
+
+const STRATEGY_ICONS = { even: Scale, priority: Zap, conflict: ShieldCheck };
 
 export default function Backlog() {
   const workspace = useWorkspace()!;
@@ -28,7 +34,9 @@ export default function Backlog() {
   };
 
   const apply = () => {
+    const n = (suggestions ?? []).filter((s) => picked.has(s.projectId)).length;
     for (const s of suggestions ?? []) if (picked.has(s.projectId)) bulk(s.projectId, { designerId: s.designerId, startWeek: s.startWeek });
+    toast(`Applied ${n} assignment${n === 1 ? '' : 's'}`, { tone: 'success' });
     setSuggestions(null);
     setPicked(new Set());
   };
@@ -38,16 +46,16 @@ export default function Backlog() {
 
   return (
     <div className="view">
-      <div className="view-head">
-        <h1>Backlog</h1>
-        <span className="chip">{backlog.length} unassigned</span>
-      </div>
+      <Toolbar>
+        <span className={`chip ${backlog.length ? 'accent' : 'ok'}`}>{backlog.length} unassigned</span>
+      </Toolbar>
 
       <div className="grid2" style={{ alignItems: 'start', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr)' }}>
         <div className="card card-pad col">
           <h2>Unassigned {workspace.config.labels.initiatives.toLowerCase()}</h2>
+          <AnimatePresence initial={false}>
           {backlog.map((e) => (
-            <div key={e.project.id} className="row" style={{ padding: '6px 0', borderTop: '1px solid var(--border)' }}>
+            <motion.div key={e.project.id} className="list-row" layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, x: 24, transition: { duration: 0.18 } }}>
               <PriorityChip p={e.project.priority} />
               <a href="#" className="ellipsis" style={{ fontWeight: 500 }} onClick={(ev) => { ev.preventDefault(); openProject(e.project.id); }}>
                 {e.project.name}
@@ -58,28 +66,32 @@ export default function Backlog() {
                 <option value="">Assign…</option>
                 {designers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
-            </div>
+            </motion.div>
           ))}
-          {!backlog.length && <div className="empty">Everything is assigned. 🎯</div>}
+          </AnimatePresence>
+          {!backlog.length && <EmptyState icon={CircleCheck} title="Everything is assigned">Nice — every initiative has an owner this quarter.</EmptyState>}
         </div>
 
         <div className="card card-pad col" style={{ gap: 12 }}>
           <div className="row">
             <h2>Auto-balancer</h2>
             <span className="spacer" />
-            <button className="btn primary" disabled={!backlog.length || !designers.length} onClick={run}>Suggest assignments</button>
+            <button className="btn primary" disabled={!backlog.length || !designers.length} onClick={run}><Sparkles size={15} /> Suggest assignments</button>
           </div>
           <div className="grid3">
-            {(Object.keys(STRATEGY_LABELS) as Strategy[]).map((k) => (
+            {(Object.keys(STRATEGY_LABELS) as Strategy[]).map((k) => {
+              const Icon = STRATEGY_ICONS[k];
+              return (
               <button key={k} className={`choice ${strategy === k ? 'on' : ''}`} onClick={() => { setStrategy(k); setSuggestions(null); }}>
-                <b className="small">{STRATEGY_LABELS[k].name}</b>
-                <p className="tiny muted" style={{ marginTop: 2 }}>{STRATEGY_LABELS[k].blurb}</p>
+                <b className="small row" style={{ gap: 6 }}><Icon size={14} style={{ color: 'var(--accent)' }} />{STRATEGY_LABELS[k].name}</b>
+                <p className="tiny muted" style={{ marginTop: 4 }}>{STRATEGY_LABELS[k].blurb}</p>
               </button>
-            ))}
+              );
+            })}
           </div>
 
           {live && (
-            <>
+            <motion.div className="col" style={{ gap: 0 }} variants={staggerParent} initial="initial" animate="animate" key={strategy + live.length}>
               <div className="row small">
                 <label className="row">
                   <input
@@ -97,7 +109,7 @@ export default function Backlog() {
                 const e = byId.get(s.projectId)!;
                 const d = dmap[s.designerId];
                 return (
-                  <label key={s.projectId} className="row" style={{ alignItems: 'flex-start', padding: '8px 0', borderTop: '1px solid var(--border)', cursor: 'pointer' }}>
+                  <motion.label key={s.projectId} variants={staggerChild} className="row" style={{ alignItems: 'flex-start', padding: '10px 0', borderTop: '1px solid var(--border)', cursor: 'pointer' }}>
                     <input
                       type="checkbox"
                       style={{ marginTop: 4 }}
@@ -113,7 +125,7 @@ export default function Backlog() {
                         <PriorityChip p={e.project.priority} />
                         <b className="ellipsis small">{e.project.name}</b>
                         <span className="spacer" />
-                        <span className="small">→</span>
+                        <ArrowRight size={14} className="faint" />
                         <Avatar designer={d} />
                         <span className="small">{d?.name}</span>
                       </div>
@@ -124,10 +136,10 @@ export default function Backlog() {
                       </div>
                       <span className="tiny muted">{s.reasoning}</span>
                     </div>
-                  </label>
+                  </motion.label>
                 );
               })}
-            </>
+            </motion.div>
           )}
           {!live && <p className="small faint">Choose a strategy and generate suggestions. Placements account for existing work, disruptions and each other.</p>}
         </div>

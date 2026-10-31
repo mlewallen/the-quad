@@ -61,6 +61,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ganttWeeksBefore: 0,
   ganttWeeksAfter: 2,
   ganttMode: 'bars',
+  sidebarCollapsed: false,
 };
 
 export const TEAM_TYPES: { id: TeamType; name: string; blurb: string }[] = [

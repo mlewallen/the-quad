@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Building2, Database, Download, Palette, Plus, RotateCcw, Trash2, Upload, Users, X, type LucideIcon } from 'lucide-react';
+import { confirmDialog, toast } from '../feedback';
 import { STORAGE_KEY, useStore } from '../store';
 import { navigate, useWorkspace } from '../hooks';
 import type { FieldLabels, PersistedState, TeamType, ThemeMode } from '../types';
@@ -7,12 +10,12 @@ import { MONTHS, quarterLabel } from '../lib/quarters';
 import Import from './Import';
 import { Avatar, Field, ListEditor, TextInput } from './ui';
 
-const SECTIONS = [
-  { id: 'appearance', label: 'Appearance' },
-  { id: 'team', label: 'Team' },
-  { id: 'workspace', label: 'Workspace' },
-  { id: 'import', label: 'Import' },
-  { id: 'data', label: 'Data' },
+const SECTIONS: { id: string; label: string; icon: LucideIcon }[] = [
+  { id: 'appearance', label: 'Appearance', icon: Palette },
+  { id: 'team', label: 'Team', icon: Users },
+  { id: 'workspace', label: 'Workspace', icon: Building2 },
+  { id: 'import', label: 'Import', icon: Upload },
+  { id: 'data', label: 'Data', icon: Database },
 ];
 
 export default function SettingsPanel({ section }: { section: string }) {
@@ -22,21 +25,23 @@ export default function SettingsPanel({ section }: { section: string }) {
       <div className="row" style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
         <h2>Settings</h2>
         <span className="spacer" />
-        <button className="btn icon ghost" aria-label="Close settings" onClick={() => navigate({ settings: null })}>✕</button>
+        <button className="btn icon ghost" aria-label="Close settings" onClick={() => navigate({ settings: null })}><X size={16} /></button>
       </div>
       <div className="settings">
         <nav>
           {SECTIONS.map((s) => (
-            <button key={s.id} className={s.id === active ? 'on' : ''} onClick={() => navigate({ settings: s.id }, true)}>{s.label}</button>
+            <button key={s.id} className={s.id === active ? 'on' : ''} onClick={() => navigate({ settings: s.id }, true)}><s.icon size={16} strokeWidth={1.75} />{s.label}</button>
           ))}
         </nav>
-        <div className="pane">
-          {active === 'appearance' && <Appearance />}
-          {active === 'team' && <Team />}
-          {active === 'workspace' && <WorkspaceSettings />}
-          {active === 'import' && <Import />}
-          {active === 'data' && <Data />}
-        </div>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div key={active} className="pane" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0, transition: { duration: 0.18 } }} exit={{ opacity: 0, transition: { duration: 0.08 } }}>
+            {active === 'appearance' && <Appearance />}
+            {active === 'team' && <Team />}
+            {active === 'workspace' && <WorkspaceSettings />}
+            {active === 'import' && <Import />}
+            {active === 'data' && <Data />}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -107,16 +112,21 @@ function Team() {
             <TextInput value={d.name} onCommit={(v) => v.trim() && updateDesigner(d.id, { name: v.trim() })} />
             <button
               className="btn sm danger ghost"
-              onClick={() => confirm(`Remove ${d.name}? Their work moves to the backlog and their disruptions are removed.`) && removeDesigner(d.id)}
+              onClick={async () => {
+                if (await confirmDialog({ title: `Remove ${d.name}?`, body: 'Their work moves to the backlog and their disruptions are removed.', confirmLabel: 'Remove', destructive: true })) {
+                  removeDesigner(d.id);
+                  toast(`Removed ${d.name}`);
+                }
+              }}
             >
-              Remove
+              <Trash2 size={13} /> Remove
             </button>
           </div>
         ))}
       </div>
       <div className="row">
         <input className="input" placeholder="New designer name" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
-        <button className="btn primary" onClick={add}>Add</button>
+        <button className="btn primary" onClick={add}><Plus size={15} /> Add</button>
       </div>
       <p className="tiny faint">New designers get the next free color from: {DESIGNER_COLORS.slice(0, 6).map((c) => <span key={c} className="dot" style={{ background: c, width: 8, height: 8, marginRight: 2 }} />)}</p>
     </>
@@ -156,7 +166,12 @@ function WorkspaceSettings() {
             <button
               className="btn sm ghost danger"
               disabled={workspaces.length < 2}
-              onClick={() => confirm(`Delete workspace "${w.name}" and all its data?`) && deleteWorkspace(w.id)}
+              onClick={async () => {
+                if (await confirmDialog({ title: `Delete “${w.name}”?`, body: 'All of its plans, initiatives and disruptions are permanently removed.', confirmLabel: 'Delete workspace', destructive: true })) {
+                  deleteWorkspace(w.id);
+                  toast(`Deleted ${w.name}`);
+                }
+              }}
             >
               Delete
             </button>
@@ -223,9 +238,9 @@ function Data() {
       const parsed = JSON.parse(await file.text());
       const data: PersistedState = parsed.state ?? parsed;
       if (!Array.isArray(data.workspaces)) throw new Error('Missing workspaces');
-      if (!confirm('Replace all current data with this backup?')) return;
+      if (!(await confirmDialog({ title: 'Restore this backup?', body: 'All current data in this browser is replaced.', confirmLabel: 'Restore', destructive: true }))) return;
       state.replaceAll({ ...data, version: parsed.version ?? data.version ?? 0 });
-      setMsg('Backup restored.');
+      toast('Backup restored', { tone: 'success' });
     } catch (e) {
       setMsg(`Couldn’t read that file: ${(e as Error).message}`);
     }
@@ -237,9 +252,9 @@ function Data() {
         <h3>Export</h3>
         <p className="small muted">Download everything (all workspaces, quarters, plans) as JSON.</p>
         <div className="row">
-          <button className="btn" onClick={exportJson}>Export JSON</button>
+          <button className="btn" onClick={exportJson}><Download size={14} /> Export JSON</button>
           <label className="btn">
-            Restore from JSON…
+            <Upload size={14} /> Restore from JSON…
             <input type="file" accept="application/json,.json" hidden onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
           </label>
         </div>
@@ -247,8 +262,17 @@ function Data() {
       <div className="col">
         <h3>Clear quarter</h3>
         <p className="small muted">Remove every item and plan in {quarterLabel(q)} for this workspace. Disruptions are kept.</p>
-        <button className="btn danger" style={{ alignSelf: 'flex-start' }} onClick={() => confirm(`Clear all ${quarterLabel(q)} data?`) && state.clearQuarter()}>
-          Clear {quarterLabel(q)}
+        <button
+          className="btn danger"
+          style={{ alignSelf: 'flex-start' }}
+          onClick={async () => {
+            if (await confirmDialog({ title: `Clear ${quarterLabel(q)}?`, body: 'Every initiative and plan in this quarter is removed.', confirmLabel: 'Clear quarter', destructive: true })) {
+              state.clearQuarter();
+              toast(`${quarterLabel(q)} cleared`);
+            }
+          }}
+        >
+          <Trash2 size={14} /> Clear {quarterLabel(q)}
         </button>
       </div>
       <div className="col">
@@ -257,14 +281,14 @@ function Data() {
         <button
           className="btn danger"
           style={{ alignSelf: 'flex-start' }}
-          onClick={() => {
-            if (confirm('Erase everything? Export first if you want a backup.')) {
+          onClick={async () => {
+            if (await confirmDialog({ title: 'Erase everything?', body: 'All workspaces and plans in this browser are deleted. Export first if you want a backup.', confirmLabel: 'Factory reset', destructive: true })) {
               state.factoryReset();
               navigate({ settings: null, project: null, page: false }, true);
             }
           }}
         >
-          Factory reset
+          <RotateCcw size={14} /> Factory reset
         </button>
       </div>
       {msg && <p className="small">{msg}</p>}

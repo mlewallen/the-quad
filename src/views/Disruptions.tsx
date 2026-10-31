@@ -1,11 +1,15 @@
 import { useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { Plus, Trash2, Users } from 'lucide-react';
+import { toast } from '../feedback';
+import { ease, staggerChild, staggerParent } from '../lib/motion';
 import { useStore } from '../store';
 import { useDesigners, useQuarterStart, useWorkspace, useWorkspaceDisruptions } from '../hooks';
 import type { Disruption, ID } from '../types';
 import { WEEKS_PER_QUARTER } from '../types';
 import { absWeekFromInput, dateInputValue, formatWeekRange } from '../lib/quarters';
 import CurveEditor from '../components/CurveEditor';
-import { Avatar, Field, TextInput } from '../components/ui';
+import { Avatar, EmptyState, Field, TextInput } from '../components/ui';
 
 export default function Disruptions() {
   const designers = useDesigners();
@@ -34,42 +38,41 @@ export default function Disruptions() {
 
   return (
     <div className="view">
-      <div className="view-head">
-        <h1>Disruptions</h1>
-        <span className="muted small">PTO, on-call, interviews and other time that isn't project work. These reduce available capacity everywhere.</span>
-      </div>
-      <div className="cards">
+      {!designers.length && <EmptyState icon={Users} title="No designers yet">Add designers in Settings → Team.</EmptyState>}
+      <motion.div className="cards" variants={staggerParent} initial="initial" animate="animate">
         {designers.map((d) => {
           const mine = disruptions.filter((x) => x.designerIds.includes(d.id)).sort((a, b) => a.startAbsWeek - b.startAbsWeek);
           const shown = mine.filter(inWindow);
           const hidden = mine.length - shown.length;
           return (
-            <div key={d.id} className="card card-pad col" style={{ gap: 8 }}>
+            <motion.div key={d.id} className="card card-pad col" style={{ gap: 8 }} variants={staggerChild}>
               <div className="row">
                 <Avatar designer={d} size="lg" />
                 <b>{d.name}</b>
                 <span className="spacer" />
-                <button className="btn sm" onClick={() => addFor(d.id)}>+ Add</button>
+                <button className="btn sm" onClick={() => addFor(d.id)}><Plus size={14} /> Add</button>
               </div>
+              <AnimatePresence initial={false} mode="popLayout">
               {shown.map((x) =>
                 editing === x.id ? (
-                  <DisruptionEditor key={x.id} d={x} onDone={() => setEditing(null)} />
+                  <DisruptionEditor key={x.id + ':edit'} d={x} onDone={() => setEditing(null)} />
                 ) : (
-                  <div key={x.id} className="row" style={{ padding: '6px 0', borderTop: '1px solid var(--border)', cursor: 'pointer' }} onClick={() => setEditing(x.id)}>
+                  <motion.div key={x.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="list-row focus-item" style={{ margin: 0 }} onClick={() => setEditing(x.id)}>
                     <span style={{ width: 14, height: 14, flex: 'none', borderRadius: 3, background: 'repeating-linear-gradient(-45deg, var(--text-3) 0 2px, transparent 2px 5px)' }} />
                     <div className="col" style={{ gap: 0, minWidth: 0 }}>
                       <span className="small" style={{ fontWeight: 500 }}>{x.type}{x.label ? ` — ${x.label}` : ''}</span>
                       <span className="tiny muted">{formatWeekRange(x.startAbsWeek, x.duration)} · {x.allocation}%{x.designerIds.length > 1 ? ` · shared with ${x.designerIds.length - 1}` : ''}</span>
                     </div>
-                  </div>
+                  </motion.div>
                 ),
               )}
+              </AnimatePresence>
               {!shown.length && <span className="small faint">No disruptions this quarter.</span>}
               {hidden > 0 && <span className="tiny faint">+{hidden} in other quarters</span>}
-            </div>
+            </motion.div>
           );
         })}
-      </div>
+      </motion.div>
     </div>
   );
 }
@@ -82,7 +85,14 @@ function DisruptionEditor({ d, onDone }: { d: Disruption; onDone: () => void }) 
   const up = (patch: Partial<Disruption>) => update(d.id, patch);
 
   return (
-    <div className="col" style={{ gap: 10, padding: 10, background: 'var(--surface-2)', borderRadius: 8 }}>
+    <motion.div
+      layout
+      className="col"
+      style={{ gap: 12, padding: 12, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: 'auto', transition: { duration: 0.24, ease: ease.out } }}
+      exit={{ opacity: 0, height: 0, transition: { duration: 0.15 } }}
+    >
       <div className="grid2">
         <Field label="Type">
           <select className="select sm" value={d.type} onChange={(e) => up({ type: e.target.value })}>
@@ -131,10 +141,19 @@ function DisruptionEditor({ d, onDone }: { d: Disruption; onDone: () => void }) 
         </div>
       </Field>
       <div className="row">
-        <button className="btn sm danger" onClick={() => remove(d.id)}>Remove</button>
+        <button
+          className="btn sm ghost danger"
+          onClick={() => {
+            const snapshot = { ...d };
+            remove(d.id);
+            toast(`Removed ${d.type}`, { action: { label: 'Undo', run: () => useStore.getState().addDisruption(snapshot) } });
+          }}
+        >
+          <Trash2 size={13} /> Remove
+        </button>
         <span className="spacer" />
         <button className="btn sm primary" onClick={onDone}>Done</button>
       </div>
-    </div>
+    </motion.div>
   );
 }

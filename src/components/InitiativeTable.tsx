@@ -1,11 +1,15 @@
 import { useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { ArrowDown, ArrowUp, Check, Inbox, Search, Trash2, X } from 'lucide-react';
+import { confirmDialog, toast } from '../feedback';
+import { spring } from '../lib/motion';
 import { useStore } from '../store';
 import { openProject, useDesignerMap, useDesigners, useQuarterStart, useWorkspace } from '../hooks';
 import type { Entry } from '../lib/capacity';
 import type { ID } from '../types';
 import { PRIORITIES, SIZES } from '../types';
 import { formatWeekRange } from '../lib/quarters';
-import { Avatar, PriorityChip } from './ui';
+import { Avatar, EmptyState, PriorityChip } from './ui';
 
 type Col = 'name' | 'designer' | 'phase' | 'priority' | 'size' | 'workType' | 'start' | 'duration' | 'allocation' | 'confirmed' | 'ticket' | 'productArea' | 'pm' | 'em';
 type SortKey = Col;
@@ -85,7 +89,7 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
   const head = (key: Col, label: string) => (
     <th key={key} className="sortable" onClick={() => setSort((s) => ({ key, dir: s.key === key ? (-s.dir as 1 | -1) : 1 }))}>
       {label}
-      {sort.key === key && (sort.dir === 1 ? ' ↑' : ' ↓')}
+      {sort.key === key && (sort.dir === 1 ? <ArrowUp size={12} className="sort-icon" /> : <ArrowDown size={12} className="sort-icon" />)}
     </th>
   );
   const headLabels: Record<Col, string> = {
@@ -97,7 +101,10 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
   return (
     <div className="col" style={{ gap: 0, minHeight: 0 }}>
       <div className="filters">
-        <input className="input sm" placeholder="Filter…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <div className="search">
+          <Search size={14} />
+          <input className="input sm" placeholder="Filter by name, ticket, partner…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Filter" />
+        </div>
         <select className="select sm" value={fDesigner} onChange={(e) => setFDesigner(e.target.value)} aria-label="Filter by designer">
           <option value="">All designers</option>
           <option value="__none">Unassigned</option>
@@ -118,7 +125,13 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
         </select>
       </div>
 
-      {selIds.length > 0 && <BulkBar ids={selIds} onDone={() => setSelected(new Set())} />}
+      <AnimatePresence>
+        {selIds.length > 0 && (
+          <motion.div key="bulk" initial={{ opacity: 0, y: -6, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto', transition: spring.snappy }} exit={{ opacity: 0, y: -6, height: 0, transition: { duration: 0.14 } }}>
+            <BulkBar ids={selIds} onDone={() => setSelected(new Set())} />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="table-wrap">
         <table className="data">
@@ -167,17 +180,21 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
                 em: <span className="small">{p.em}</span>,
               };
               return (
-                <tr key={p.id} className={`clickable ${selected.has(p.id) ? 'selected' : ''}`} onClick={() => openProject(p.id)}>
+                <motion.tr layout="position" transition={spring.smooth} key={p.id} className={`clickable ${selected.has(p.id) ? 'selected' : ''}`} onClick={() => openProject(p.id)}>
                   <td className="check" onClick={(e) => { e.stopPropagation(); toggle(p.id, e.shiftKey); }}>
                     <input type="checkbox" checked={selected.has(p.id)} readOnly aria-label={`Select ${p.name}`} />
                   </td>
                   {cols.map((c) => <td key={c}>{cell[c]}</td>)}
-                </tr>
+                </motion.tr>
               );
             })}
           </tbody>
         </table>
-        {!rows.length && <div className="empty">{entries.length ? 'Nothing matches these filters.' : `No ${labels.initiatives.toLowerCase()} this quarter yet.`}</div>}
+        {!rows.length && (
+          entries.length
+            ? <EmptyState icon={Search} title="Nothing matches these filters" />
+            : <EmptyState icon={Inbox} title={`No ${labels.initiatives.toLowerCase()} this quarter yet`}>Add one from the top bar or import a spreadsheet.</EmptyState>
+        )}
       </div>
     </div>
   );
@@ -196,7 +213,7 @@ function BulkBar({ ids, onDone }: { ids: ID[]; onDone: () => void }) {
   return (
     <div className="bulkbar">
       <b>{ids.length} selected</b>
-      <span className="faint tiny">shift-click to select a range</span>
+      <span className="faint tiny">Shift-click to select a range</span>
       <span className="spacer" />
       <select className="select sm" style={{ width: 'auto' }} defaultValue="" onChange={pick((v) => bulk(ids, {}, { designerId: v === '__none' ? null : v }))}>
         <option value="" disabled>Assign…</option>
@@ -219,20 +236,27 @@ function BulkBar({ ids, onDone }: { ids: ID[]; onDone: () => void }) {
         <option value="" disabled>Type…</option>
         {workspace.config.workTypes.map((p) => <option key={p}>{p}</option>)}
       </select>
-      <button className="btn sm" onClick={() => bulk(ids, {}, { confirmed: true })}>Confirm</button>
+      <button className="btn sm" onClick={() => { bulk(ids, {}, { confirmed: true }); toast(`Confirmed ${ids.length}`, { tone: 'success' }); }}><Check size={13} /> Confirm</button>
       <button className="btn sm" onClick={() => bulk(ids, {}, { confirmed: false })}>Unconfirm</button>
       <button
         className="btn sm danger"
-        onClick={() => {
-          if (confirm(`Delete ${ids.length} item(s) from every plan?`)) {
+        onClick={async () => {
+          const ok = await confirmDialog({
+            title: `Delete ${ids.length} item${ids.length === 1 ? '' : 's'}?`,
+            body: 'They are removed from every plan in this quarter. This can’t be undone.',
+            confirmLabel: 'Delete',
+            destructive: true,
+          });
+          if (ok) {
             del(ids);
             onDone();
+            toast(`Deleted ${ids.length} item${ids.length === 1 ? '' : 's'}`);
           }
         }}
       >
-        Delete
+        <Trash2 size={13} /> Delete
       </button>
-      <button className="btn sm ghost" onClick={onDone}>Clear</button>
+      <button className="btn sm ghost icon" aria-label="Clear selection" onClick={onDone}><X size={14} /></button>
     </div>
   );
 }

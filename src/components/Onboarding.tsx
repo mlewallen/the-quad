@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { ArrowLeft, ArrowRight, Plus, X } from 'lucide-react';
+import { ease, spring } from '../lib/motion';
 import { useStore } from '../store';
 import { navigate } from '../hooks';
 import type { Size, TeamType } from '../types';
@@ -14,7 +17,12 @@ interface InitDraft { name: string; designerIndex: number | null; size: Size }
 export default function Onboarding() {
   const complete = useStore((s) => s.completeOnboarding);
   const hasExisting = useStore((s) => s.workspaces.length > 0);
-  const [step, setStep] = useState(0);
+  const [step, setStepRaw] = useState(0);
+  const [dir, setDir] = useState(1);
+  const setStep = (n: number) => {
+    setDir(n > step ? 1 : -1);
+    setStepRaw(n);
+  };
   const [teamType, setTeamType] = useState<TeamType>('product');
   const [name, setName] = useState('');
   const [fiscalStartMonth, setFiscal] = useState(useStore.getState().settings.fiscalStartMonth);
@@ -60,14 +68,28 @@ export default function Onboarding() {
 
   return (
     <div className="onboard">
-      <div className="card onboard-card" style={{ padding: 28 }}>
+      <motion.div className="card onboard-card" style={{ padding: 32, overflow: 'hidden' }} initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={spring.smooth} layout="size">
         <div className="row" style={{ marginBottom: 18 }}>
           <div className="brand"><span className="brand-mark" aria-hidden><i /><i /><i /><i /></span>The Quad</div>
           <span className="spacer" />
           <span className="tiny faint">Step {step + 1} of 4 · {steps[step]}</span>
         </div>
-        <div className="steps">{steps.map((s, i) => <div key={s} className={i <= step ? 'on' : ''} />)}</div>
+        <div className="steps">
+          {steps.map((s, i) => (
+            <div key={s}>
+              <motion.span initial={false} animate={{ scaleX: i <= step ? 1 : 0 }} transition={{ duration: 0.4, ease: ease.out }} />
+            </div>
+          ))}
+        </div>
 
+        <AnimatePresence mode="wait" custom={dir} initial={false}>
+        <motion.div
+          key={step}
+          custom={dir}
+          initial={{ opacity: 0, x: dir * 24 }}
+          animate={{ opacity: 1, x: 0, transition: { duration: 0.26, ease: ease.out } }}
+          exit={{ opacity: 0, x: dir * -16, transition: { duration: 0.14, ease: ease.in } }}
+        >
         {step === 0 && (
           <div className="col" style={{ gap: 16 }}>
             <div>
@@ -122,11 +144,11 @@ export default function Onboarding() {
                   onChange={(e) => setDesigners(designers.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
                   onKeyDown={(e) => e.key === 'Enter' && i === designers.length - 1 && setDesigners([...designers, { name: '', color: DESIGNER_COLORS[designers.length % DESIGNER_COLORS.length] }])}
                 />
-                <button className="btn icon ghost" aria-label="Remove" disabled={designers.length < 2} onClick={() => setDesigners(designers.filter((_, j) => j !== i))}>✕</button>
+                <button className="btn icon ghost" aria-label="Remove" disabled={designers.length < 2} onClick={() => setDesigners(designers.filter((_, j) => j !== i))}><X size={15} /></button>
               </div>
             ))}
             <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => setDesigners([...designers, { name: '', color: DESIGNER_COLORS[designers.length % DESIGNER_COLORS.length] }])}>
-              + Designer
+              <Plus size={15} /> Designer
             </button>
           </div>
         )}
@@ -149,7 +171,7 @@ export default function Onboarding() {
                   />
                   <select
                     className="select"
-                    style={{ width: 160 }}
+                    style={{ width: 150, flex: 'none' }}
                     value={it.designerIndex ?? ''}
                     onChange={(e) => setInits(inits.map((x, j) => (j === i ? { ...x, designerIndex: e.target.value === '' ? null : Number(e.target.value) } : x)))}
                     aria-label="Designer"
@@ -163,12 +185,12 @@ export default function Onboarding() {
                     ))}
                   </div>
                   <span className="tiny faint nowrap" style={{ width: 40 }}>{weeks}w</span>
-                  <button className="btn icon ghost" aria-label="Remove" onClick={() => setInits(inits.length > 1 ? inits.filter((_, j) => j !== i) : [{ name: '', designerIndex: null, size: 'M' }])}>✕</button>
+                  <button className="btn icon ghost" aria-label="Remove" onClick={() => setInits(inits.length > 1 ? inits.filter((_, j) => j !== i) : [{ name: '', designerIndex: null, size: 'M' }])}><X size={15} /></button>
                 </div>
               );
             })}
             <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => setInits([...inits, { name: '', designerIndex: null, size: 'M' }])}>
-              + {labels.initiative}
+              <Plus size={15} /> {labels.initiative}
             </button>
           </div>
         )}
@@ -197,16 +219,19 @@ export default function Onboarding() {
           </div>
         )}
 
-        <div className="row" style={{ marginTop: 24 }}>
-          {step > 0 && <button className="btn ghost" onClick={() => setStep(step - 1)}>Back</button>}
+        </motion.div>
+        </AnimatePresence>
+
+        <div className="row" style={{ marginTop: 28 }}>
+          {step > 0 && <button className="btn ghost" onClick={() => setStep(step - 1)}><ArrowLeft size={15} /> Back</button>}
           <span className="spacer" />
           {step < 3 ? (
-            <button className="btn primary" disabled={!canNext} onClick={() => setStep(step + 1)}>Continue</button>
+            <button className="btn primary" disabled={!canNext} onClick={() => setStep(step + 1)}>Continue <ArrowRight size={15} /></button>
           ) : (
-            <button className="btn primary" onClick={finish}>Open planning view →</button>
+            <button className="btn primary" onClick={finish}>Open planning view <ArrowRight size={15} /></button>
           )}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

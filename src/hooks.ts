@@ -120,14 +120,14 @@ export function useLoad(weeksBefore = 0, weeksAfter = 0): { load: Record<ID, Wee
 /* ---------- Hash routing ---------- */
 
 export type View = 'home' | 'gantt' | 'allocation' | 'disruptions' | 'focus' | 'manage' | 'backlog';
-export const VIEWS: { id: View; label: string }[] = [
-  { id: 'home', label: 'Home' },
-  { id: 'gantt', label: 'Gantt' },
-  { id: 'allocation', label: 'Allocation' },
-  { id: 'disruptions', label: 'Disruptions' },
-  { id: 'focus', label: 'Focus' },
-  { id: 'manage', label: 'Manage' },
-  { id: 'backlog', label: 'Backlog' },
+export const VIEWS: { id: View; label: string; description: string }[] = [
+  { id: 'home', label: 'Home', description: 'Plans, initiatives and team load at a glance' },
+  { id: 'gantt', label: 'Gantt', description: 'Drag to schedule, resize to change duration' },
+  { id: 'allocation', label: 'Allocation', description: 'Weekly load per designer' },
+  { id: 'disruptions', label: 'Disruptions', description: 'PTO, on-call and other non-project time' },
+  { id: 'focus', label: 'Focus', description: 'What each person is working on' },
+  { id: 'manage', label: 'Manage', description: 'Every initiative this quarter, bulk-editable' },
+  { id: 'backlog', label: 'Backlog', description: 'Unassigned work and the auto-balancer' },
 ];
 
 export interface Route {

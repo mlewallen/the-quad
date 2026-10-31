@@ -1,4 +1,8 @@
 import { useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { CircleCheck, Copy, Pencil, Plus, Trash2 } from 'lucide-react';
+import { confirmDialog, toast } from '../feedback';
+import { spring, staggerChild, staggerParent } from '../lib/motion';
 import { useStore } from '../store';
 import { entriesFor, openProject, useActivePlan, useDesigners, useEntries, useLoad, useQuarterPlans, useQuarterProjects, useWorkspace, useWorkspaceDisruptions } from '../hooks';
 import type { Plan } from '../types';
@@ -64,13 +68,22 @@ function PlansColumn() {
         <h2>Plans</h2>
         <span className="chip">{plans.length}</span>
         <span className="spacer" />
-        <button className="btn sm" onClick={() => createPlan()}>+ New</button>
+        <button className="btn sm" onClick={() => { createPlan(); toast('Blank plan created', { tone: 'success' }); }}><Plus size={14} /> New</button>
       </div>
       <div className="col-body">
+        <AnimatePresence initial={false}>
         {plans.map((p) => {
           const st = stats[p.id];
           return (
-            <div key={p.id} className={`plan-item ${p.id === active?.id ? 'active' : ''}`} onClick={() => setActivePlan(p.id)}>
+            <motion.div
+              key={p.id}
+              layout
+              initial={{ opacity: 0, y: -8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1, transition: spring.smooth }}
+              exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.15 } }}
+              className={`plan-item ${p.id === active?.id ? 'active' : ''}`}
+              onClick={() => setActivePlan(p.id)}
+            >
               <div className="row">
                 {renaming === p.id ? (
                   <input
@@ -96,21 +109,29 @@ function PlansColumn() {
                 <div className="stat"><b style={{ color: st.over ? 'var(--over)' : undefined }}>{st.over}</b><span>Over wks</span></div>
               </div>
               <div className="row" onClick={(e) => e.stopPropagation()}>
-                <button className="btn sm ghost" onClick={() => setRenaming(p.id)}>Rename</button>
-                <button className="btn sm ghost" onClick={() => duplicatePlan(p.id)}>Duplicate</button>
+                <button className="btn sm ghost icon" aria-label={`Rename ${p.name}`} title="Rename" onClick={() => setRenaming(p.id)}><Pencil size={14} /></button>
+                <button className="btn sm ghost icon" aria-label={`Duplicate ${p.name}`} title="Duplicate" onClick={() => { duplicatePlan(p.id); toast(`Duplicated ${p.name}`, { tone: 'success' }); }}><Copy size={14} /></button>
+                {p.id !== active?.id && <button className="btn sm ghost" onClick={() => setActivePlan(p.id)}>Make active</button>}
                 <span className="spacer" />
                 <button
-                  className="btn sm ghost danger"
+                  className="btn sm ghost icon danger"
                   disabled={plans.length < 2}
-                  title={plans.length < 2 ? 'A quarter needs at least one plan' : undefined}
-                  onClick={() => confirm(`Delete ${p.name}?`) && deletePlan(p.id)}
+                  aria-label={`Delete ${p.name}`}
+                  title={plans.length < 2 ? 'A quarter needs at least one plan' : `Delete ${p.name}`}
+                  onClick={async () => {
+                    if (await confirmDialog({ title: `Delete ${p.name}?`, body: 'Its assignments and dates are removed. Initiative details stay in the other plans.', confirmLabel: 'Delete plan', destructive: true })) {
+                      deletePlan(p.id);
+                      toast(`Deleted ${p.name}`);
+                    }
+                  }}
                 >
-                  Delete
+                  <Trash2 size={14} />
                 </button>
               </div>
-            </div>
+            </motion.div>
           );
         })}
+        </AnimatePresence>
         <p className="tiny faint" style={{ padding: '4px 2px' }}>
           Plans for {quarterLabel(q)} share {projects.length} item{projects.length === 1 ? '' : 's'}; each plan has its own assignments and dates.
         </p>
@@ -129,13 +150,13 @@ function TeamColumn() {
         <h2>Team</h2>
         <span className="chip">{designers.length}</span>
       </div>
-      <div className="col-body">
+      <motion.div className="col-body" variants={staggerParent} initial="initial" animate="animate">
         {designers.map((d) => {
           const s = summarize(load[d.id] ?? []);
           const mine = entries.filter((e) => e.schedule.designerId === d.id);
           const confirmed = mine.filter((e) => e.schedule.confirmed);
           return (
-            <div key={d.id} style={{ padding: '10px 4px', borderBottom: '1px solid var(--border)' }}>
+            <motion.div key={d.id} className="team-row" variants={staggerChild}>
               <div className="row">
                 <Avatar designer={d} />
                 <b className="ellipsis">{d.name}</b>
@@ -151,17 +172,17 @@ function TeamColumn() {
               {confirmed.length > 0 && (
                 <div className="col" style={{ gap: 2 }}>
                   {confirmed.map((e) => (
-                    <a key={e.project.id} className="small ellipsis" href="#" onClick={(ev) => { ev.preventDefault(); openProject(e.project.id); }}>
-                      ✓ {e.project.name}
+                    <a key={e.project.id} className="small ellipsis" style={{ color: 'var(--text-2)' }} href="#" onClick={(ev) => { ev.preventDefault(); openProject(e.project.id); }}>
+                      <CircleCheck size={12} style={{ color: 'var(--ok)', verticalAlign: -1, marginRight: 4 }} />{e.project.name}
                     </a>
                   ))}
                 </div>
               )}
-            </div>
+            </motion.div>
           );
         })}
         {!designers.length && <div className="empty">No designers yet.</div>}
-      </div>
+      </motion.div>
     </section>
   );
 }
