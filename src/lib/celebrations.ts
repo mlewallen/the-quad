@@ -14,13 +14,13 @@ export const CELEBRATIONS: CelebrationDef[] = [
   {
     id: 'first-initiative',
     title: 'First stroke',
-    how: 'Add the first initiative to an empty quarter.',
+    how: 'Add the first project to an empty quarter.',
     flavor: 'Every quarter starts with one idea on the board.',
   },
   {
     id: 'approve',
     title: 'Stamp of approval',
-    how: 'Move any initiative into the Approve phase.',
+    how: 'Move any project into the Approve phase.',
     flavor: 'Work made it to sign-off.',
   },
   {

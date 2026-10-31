@@ -27,7 +27,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'team', label: 'Team', icon: Users, description: 'The designers you plan for in this workspace.' },
   { id: 'workspace', label: 'Workspace', icon: Building2, description: 'Workspace details, workflow options and the words your team uses.' },
   { id: 'celebrations', label: 'Celebrations', icon: Trophy, description: 'Small moments of delight, and the ones you have left to find.' },
-  { id: 'import', label: 'Import', icon: Upload, description: 'Bring initiatives in from a spreadsheet, CSV file or Google Sheet.' },
+  { id: 'import', label: 'Import', icon: Upload, description: 'Bring projects in from a spreadsheet, CSV file or Google Sheet.' },
   { id: 'data', label: 'Data', icon: Database, description: 'Back up, restore, or clear the data stored in this browser.' },
 ];
 
@@ -155,7 +155,7 @@ function Appearance() {
       </Group>
 
       <Group title="Layout" description="Where things open when you click into them.">
-        <Row label="Initiative details" description="A side panel keeps your view visible. A modal focuses on one item. Full page gives the most room.">
+        <Row label="Project details" description="A side panel keeps your view visible. A modal focuses on one item. Full page gives the most room.">
           <Segmented
             label="Open details as"
             value={s.detailMode}
@@ -220,9 +220,22 @@ function Team() {
   );
 }
 
+// Display names for the terminology keys (the keys themselves are stored in saved data).
+const LABEL_NAMES: Record<keyof FieldLabels, string> = {
+  initiative: 'Work item (singular)',
+  initiatives: 'Work items (plural)',
+  ticket: 'Ticket',
+  reference: 'Reference',
+  productArea: 'Product area',
+  goal: 'Goal',
+  gaTarget: 'GA target',
+  pm: 'PM',
+  em: 'EM',
+};
+
 const LABEL_HELP: Record<keyof FieldLabels, string> = {
-  initiative: 'Singular name for a unit of work.',
-  initiatives: 'Plural, used in headings and counts.',
+  initiative: 'What you call one unit of planned work.',
+  initiatives: 'The plural, used in headings and counts.',
   ticket: 'Tracker reference, e.g. a Jira key.',
   reference: 'Link to a doc, brief or Figma file.',
   productArea: 'The part of the product it belongs to.',
@@ -275,7 +288,7 @@ function WorkspaceSettings() {
                 title={workspaces.length < 2 ? 'You need at least one workspace' : `Delete ${w.name}`}
                 disabled={workspaces.length < 2}
                 onClick={async () => {
-                  if (await confirmDialog({ title: `Delete “${w.name}”?`, body: 'All of its plans, initiatives and disruptions are permanently removed.', confirmLabel: 'Delete workspace', destructive: true })) {
+                  if (await confirmDialog({ title: `Delete “${w.name}”?`, body: 'All of its plans, projects and disruptions are permanently removed.', confirmLabel: 'Delete workspace', destructive: true })) {
                     deleteWorkspace(w.id);
                     toast(`Deleted ${w.name}`);
                   }
@@ -313,7 +326,7 @@ function WorkspaceSettings() {
       </Group>
 
       <Group title="Workflow options" description={`The choices offered in dropdowns across ${ws.name}. Press Enter to add an option.`}>
-        <Row stack label="Design phases" description="The stages an initiative moves through, in order. Moving into a phase named “Approve” is celebrated.">
+        <Row stack label="Design phases" description="The stages a project moves through, in order. Moving into a phase named “Approve” is celebrated.">
           <ListEditor items={cfg.phases} onChange={(phases) => setCfg({ phases })} placeholder="Add a phase…" />
         </Row>
         <Row stack label="Work types" description="Design, Consult and Monitor have built-in effort profiles for duration recommendations. Custom types use the Design profile.">
@@ -322,14 +335,14 @@ function WorkspaceSettings() {
         <Row stack label="Disruption types" description="Kinds of non-project time, such as PTO or on-call.">
           <ListEditor items={cfg.disruptionTypes} onChange={(disruptionTypes) => setCfg({ disruptionTypes })} placeholder="Add a disruption type…" />
         </Row>
-        <Row stack label="Milestone types" description="Markers you can place on an initiative’s timeline.">
+        <Row stack label="Milestone types" description="Markers you can place on a project’s timeline.">
           <ListEditor items={cfg.milestoneTypes} onChange={(milestoneTypes) => setCfg({ milestoneTypes })} placeholder="Add a milestone type…" />
         </Row>
       </Group>
 
       <Group title="Terminology" description="Rename fields to match how your team talks. Changes apply everywhere in this workspace.">
         {(Object.keys(cfg.labels) as (keyof FieldLabels)[]).map((k) => (
-          <Row key={k} label={<span style={{ textTransform: 'capitalize' }}>{k.replace(/([A-Z])/g, ' $1').toLowerCase()}</span>} description={LABEL_HELP[k]}>
+          <Row key={k} label={LABEL_NAMES[k]} description={LABEL_HELP[k]}>
             <div style={{ width: 220 }}><TextInput className="input sm" value={cfg.labels[k]} onCommit={(v) => v.trim() && setLabel(k, v.trim())} /></div>
           </Row>
         ))}
@@ -469,11 +482,11 @@ function Data() {
       </Group>
 
       <Group title="Danger zone" description="These can’t be undone. Export a backup first if you might need the data again." tone="danger">
-        <Row label={`Clear ${quarterLabel(q)}`} description="Removes every initiative and plan in this quarter for the current workspace. Disruptions are kept.">
+        <Row label={`Clear ${quarterLabel(q)}`} description="Removes every project and plan in this quarter for the current workspace. Disruptions are kept.">
           <button
             className="btn sm danger"
             onClick={async () => {
-              if (await confirmDialog({ title: `Clear ${quarterLabel(q)}?`, body: 'Every initiative and plan in this quarter is removed.', confirmLabel: 'Clear quarter', destructive: true })) {
+              if (await confirmDialog({ title: `Clear ${quarterLabel(q)}?`, body: 'Every project and plan in this quarter is removed.', confirmLabel: 'Clear quarter', destructive: true })) {
                 state.clearQuarter();
                 toast(`${quarterLabel(q)} cleared`);
               }

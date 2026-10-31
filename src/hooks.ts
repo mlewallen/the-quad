@@ -123,12 +123,12 @@ export type View = 'home' | 'gantt' | 'allocation' | 'disruptions' | 'focus' | '
 /** Views shown in the sidebar nav; 'designer' is reached per person. */
 export type NavView = Exclude<View, 'designer'>;
 export const VIEWS: { id: NavView; label: string; description: string }[] = [
-  { id: 'home', label: 'Home', description: 'Plans, initiatives and team load at a glance' },
+  { id: 'home', label: 'Home', description: 'Plans, projects and team load at a glance' },
   { id: 'gantt', label: 'Gantt', description: 'Drag to schedule, resize to change duration' },
   { id: 'allocation', label: 'Allocation', description: 'Weekly load per designer' },
   { id: 'disruptions', label: 'Disruptions', description: 'PTO, on-call and other non-project time' },
   { id: 'focus', label: 'Focus', description: 'What each person is working on' },
-  { id: 'manage', label: 'Manage', description: 'Every initiative this quarter, bulk-editable' },
+  { id: 'manage', label: 'Manage', description: 'Every project this quarter, bulk-editable' },
   { id: 'backlog', label: 'Backlog', description: 'Unassigned work and the auto-balancer' },
 ];
 

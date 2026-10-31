@@ -119,7 +119,7 @@ function PlansColumn() {
                   aria-label={`Delete ${p.name}`}
                   title={plans.length < 2 ? 'A quarter needs at least one plan' : `Delete ${p.name}`}
                   onClick={async () => {
-                    if (await confirmDialog({ title: `Delete ${p.name}?`, body: 'Its assignments and dates are removed. Initiative details stay in the other plans.', confirmLabel: 'Delete plan', destructive: true })) {
+                    if (await confirmDialog({ title: `Delete ${p.name}?`, body: 'Its assignments and dates are removed. Project details stay in the other plans.', confirmLabel: 'Delete plan', destructive: true })) {
                       deletePlan(p.id);
                       toast(`Deleted ${p.name}`);
                     }

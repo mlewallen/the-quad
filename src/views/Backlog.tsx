@@ -69,7 +69,7 @@ export default function Backlog() {
             </motion.div>
           ))}
           </AnimatePresence>
-          {!backlog.length && <EmptyState icon={CircleCheck} title="Everything is assigned">Nice — every initiative has an owner this quarter.</EmptyState>}
+          {!backlog.length && <EmptyState icon={CircleCheck} title="Everything is assigned">Nice — every project has an owner this quarter.</EmptyState>}
         </div>
 
         <div className="card card-pad col" style={{ gap: 12 }}>

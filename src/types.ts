@@ -70,7 +70,7 @@ export interface Project {
 export interface Milestone {
   id: ID;
   type: string;
-  /** Weeks from the initiative's start week (fractional allowed). */
+  /** Weeks from the project's start week (fractional allowed). */
   offset: number;
   note: string;
 }

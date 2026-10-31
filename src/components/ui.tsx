@@ -38,7 +38,7 @@ export function Modal({ onClose, children, wide, size }: { onClose: () => void; 
       exit={{ opacity: 0, transition: { duration: 0.14 } }}
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <motion.div className={`modal ${wide ? 'wide' : ''} ${size ?? ''}`} role="dialog" aria-modal="true" variants={dialogIn} initial="initial" animate="animate" exit="exit">
+      <motion.div className={`modal ${wide ? 'wide' : ''} ${size ? `${size}-modal` : ''}`} role="dialog" aria-modal="true" variants={dialogIn} initial="initial" animate="animate" exit="exit">
         {children}
       </motion.div>
     </motion.div>

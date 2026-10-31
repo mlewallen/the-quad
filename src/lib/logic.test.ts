@@ -103,3 +103,21 @@ describe('celebration unlocks', () => {
     expect(s.unlocked).toEqual({ 'first-initiative': 0, 'ten-plans': 0 });
   });
 });
+
+describe('terminology migration', () => {
+  it('renames default Initiative labels to Project but keeps custom ones', () => {
+    const labels = (initiative: string, initiatives: string) => ({ config: { teamType: 'product', labels: { initiative, initiatives } } });
+    const v3 = {
+      version: 3,
+      workspaces: [
+        { id: 'a', name: 'A', designers: [], ...labels('Initiative', 'Initiatives') },
+        { id: 'b', name: 'B', designers: [], ...labels('Epic', 'Epics') },
+      ],
+      projects: [],
+      plans: [],
+    };
+    const s = migrate(v3 as never, 3);
+    expect(s.workspaces[0].config.labels).toMatchObject({ initiative: 'Project', initiatives: 'Projects' });
+    expect(s.workspaces[1].config.labels).toMatchObject({ initiative: 'Epic', initiatives: 'Epics' });
+  });
+});

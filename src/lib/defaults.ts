@@ -8,8 +8,8 @@ export const DESIGNER_COLORS = [
 export const ACCENT_PRESETS = ['#5b5bd6', '#0d9488', '#e5484d', '#d97706', '#0284c7', '#9333ea', '#16a34a'];
 
 const BASE_LABELS: FieldLabels = {
-  initiative: 'Initiative',
-  initiatives: 'Initiatives',
+  initiative: 'Project',
+  initiatives: 'Projects',
   ticket: 'Ticket',
   reference: 'Reference',
   productArea: 'Product area',
@@ -37,7 +37,7 @@ export function defaultConfig(teamType: TeamType): WorkspaceConfig {
       phases: ['Plan', 'Design', 'Approve', 'Deliver'],
       workTypes: ['Design', 'Consult', 'Monitor'],
       milestoneTypes: ['Checkpoint', 'Handoff'],
-      labels: { ...BASE_LABELS, initiative: 'Project', initiatives: 'Projects' },
+      labels: { ...BASE_LABELS },
     };
   }
   return {

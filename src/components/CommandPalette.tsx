@@ -119,7 +119,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
         <input
           autoFocus
           value={query}
-          placeholder="Search views, actions, initiatives…"
+          placeholder="Search views, actions, projects…"
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown') { e.preventDefault(); setIndex((i) => Math.min(filtered.length - 1, i + 1)); }

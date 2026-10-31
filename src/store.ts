@@ -9,7 +9,7 @@ import { defaultAllocation, recommendedDuration } from './lib/sizing';
 import { celebrationTitle, type CelebrationId } from './lib/celebrations';
 
 export const STORAGE_KEY = 'the-quad';
-export const STATE_VERSION = 3;
+export const STATE_VERSION = 4;
 
 export const uid = () => crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 
@@ -376,7 +376,7 @@ export const useStore = create<Store>()(
               return { ...p, schedules };
             }),
           }));
-          if (quarterWasEmpty) get().celebrate('first-initiative', 'First initiative of the quarter — off to a good start');
+          if (quarterWasEmpty) get().celebrate('first-initiative', 'First project of the quarter — off to a good start');
           return created.map((p) => p.id);
         },
 
@@ -560,6 +560,16 @@ export function migrate(raw: Partial<PersistedState>, version: number): Persiste
     state.totalPlansCreated = Math.max(state.totalPlansCreated ?? 0, state.plans.length);
   }
   state.disruptions = (state.disruptions ?? []).map((d) => ({ ...d, curve: d.curve ?? { shape: 'flat' } }));
+  // v4: "Initiative" became "Project". Only swap labels still on the old default
+  // so a team's own terminology is left alone.
+  if (version < 4) {
+    state.workspaces = state.workspaces.map((w) => {
+      const l = { ...w.config.labels };
+      if (l.initiative === 'Initiative') l.initiative = 'Project';
+      if (l.initiatives === 'Initiatives') l.initiatives = 'Projects';
+      return { ...w, config: { ...w.config, labels: l } };
+    });
+  }
   // Backfill unlocks that are provable from existing data (time unknown -> 0).
   state.unlocked = { ...(state.unlocked ?? {}) };
   if (state.projects.length && !('first-initiative' in state.unlocked)) state.unlocked['first-initiative'] = 0;
