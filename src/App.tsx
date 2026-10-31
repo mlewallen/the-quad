@@ -7,7 +7,11 @@ import { fadeUp, spring } from './lib/motion';
 import { Sidebar, TopBar } from './components/Shell';
 import CommandPalette from './components/CommandPalette';
 import { ConfirmHost, Toaster } from './components/Feedback';
+import { ImporterModal } from './components/Importer';
+import GlobalIngest from './components/GlobalIngest';
 import Onboarding from './components/Onboarding';
+import Gate from './components/Gate';
+import { useAccount } from './account';
 import SettingsPanel from './components/Settings';
 import ProjectDetail from './components/ProjectDetail';
 import Celebration from './components/Celebration';
@@ -72,17 +76,28 @@ export default function App() {
   const workspace = useWorkspace();
   const route = useRoute();
   const detailMode = useStore((s) => s.settings.detailMode);
-  const ready = onboarded && !!workspace;
+  const account = useAccount((s) => s.account);
+  const ready = !!account && onboarded && !!workspace;
   useShortcuts(ready);
 
   useEffect(() => {
     if (onboarded) ensurePlan();
   }, [onboarded, workspace?.id, ensurePlan]);
 
+  if (!account) {
+    return (
+      <MotionConfig reducedMotion="user">
+        <Gate />
+        <Toaster />
+      </MotionConfig>
+    );
+  }
+
   if (!ready) {
     return (
       <MotionConfig reducedMotion="user">
         <Onboarding />
+        <Toaster />
         <Celebration />
       </MotionConfig>
     );
@@ -130,6 +145,8 @@ export default function App() {
           )}
         </AnimatePresence>
         <CommandPalette />
+        <ImporterModal />
+        <GlobalIngest />
         <ConfirmHost />
         <Toaster />
         <Celebration />

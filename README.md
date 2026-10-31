@@ -11,6 +11,19 @@ npm test           # capacity / curve / balancer / migration unit tests
 npm run build      # typecheck + production build into dist/
 ```
 
+## Accounts
+
+The app opens on a sign-in screen. This isn't real authentication yet: an account is just an email and a name, stored in this browser. Each account's plans are kept under their own storage key (`the-quad:user:<email>`). Data created before accounts existed moves into the first account that signs in. People can also opt into product-update emails, or join the update list without signing in. Opt-ins are stored locally and can be exported as CSV from Settings → Account. To send them to a mailing-list service, set `VITE_SIGNUP_ENDPOINT` (each signup is POSTed there as JSON). See `src/account.ts` and `src/lib/session.ts`.
+
+## Adding data fast
+
+- **Paste anywhere.** Copy cells from a spreadsheet, a CSV or JSON export, tracker links, or plain lines, then press ⌘V/Ctrl-V anywhere outside a text field. The importer opens with the data already detected.
+- **Drop a file** (CSV, TSV or JSON) anywhere on the window.
+- **Quick-add syntax**, one project per line: `Checkout redesign @maya !P1 ~L #Checkout 6w 50%` sets the designer, priority, size or story points, product area, duration and allocation.
+- **Trackers:** Jira, Asana, ServiceNow and Linear exports (CSV or JSON) and issue links are recognized automatically. Imported projects remember their tracker key, so importing again updates them instead of creating duplicates.
+
+`src/lib/ingest.ts` is where future live integrations plug in. Each source is turned into a common `ExternalItem` format. `planImport` then decides what to create and what to update (matching by tracker id, then ticket, then name), maps statuses to phases, priorities, points to sizes, and dates to weeks, and matches designers by email, name or first name. The store's `applyImport` writes the result. A live Jira or Asana sync only needs to produce `ExternalItem[]`.
+
 ## Demo data
 
 To try the app with a realistic team, use **Settings → Data → Load demo team**, the ⌘K palette ("Load demo team"), or the link on the first onboarding screen. Any of these adds a separate workspace (`src/lib/demo.ts`) with 10 designers, ~27 projects this quarter plus a draft for next quarter, two plan scenarios, PTO, on-call and onboarding. Your own data isn't touched. The data is the same every time it loads, and includes a few overloaded designers and some unassigned work so every view has something to show.

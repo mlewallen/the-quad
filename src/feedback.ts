@@ -19,11 +19,19 @@ export interface ConfirmRequest {
   resolve: (ok: boolean) => void;
 }
 
+export interface ImporterRequest {
+  text?: string;
+  filename?: string;
+  tab?: 'paste' | 'upload' | 'sheets' | 'trackers';
+}
+
 interface FeedbackState {
   toasts: Toast[];
   confirm: ConfirmRequest | null;
   paletteOpen: boolean;
   setPaletteOpen(open: boolean): void;
+  /** Open importer modal (paste anywhere, file drop, palette). */
+  importer: ImporterRequest | null;
 }
 
 export const useFeedback = create<FeedbackState>()((set) => ({
@@ -31,7 +39,16 @@ export const useFeedback = create<FeedbackState>()((set) => ({
   confirm: null,
   paletteOpen: false,
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
+  importer: null,
 }));
+
+export function openImporter(req: ImporterRequest = {}) {
+  useFeedback.setState({ importer: req, paletteOpen: false });
+}
+
+export function closeImporter() {
+  useFeedback.setState({ importer: null });
+}
 
 let nextId = 1;
 

@@ -2,6 +2,7 @@ import { useId, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { ChartArea, ChartGantt, Users } from 'lucide-react';
 import { readableOn, spring } from '../lib/motion';
+import { useBarDrag, type DragKind } from '../lib/useBarDrag';
 import { useStore } from '../store';
 import {
   openProject, useDesignerMap, useDesigners, useEntries, useLoad, useQuarterStart, useWorkspace, useWorkspaceDisruptions,
@@ -13,17 +14,6 @@ import { loadLevel, summarize } from '../lib/capacity';
 import { weeklyAllocation } from '../lib/curves';
 import { formatAbsWeek, formatWeekRange, utcToAbsWeek } from '../lib/quarters';
 import { Avatar, EmptyState, HealthStrip, LoadChip, PriorityChip, Toolbar } from '../components/ui';
-
-interface DragState {
-  id: ID;
-  kind: 'move' | 'l' | 'r';
-  startX: number;
-  pxPerWeek: number;
-  orig: { startWeek: number; duration: number; designerId: ID | null };
-  dWeeks: number;
-  targetDesigner: ID | null | undefined;
-  moved: boolean;
-}
 
 interface Hover {
   x: number;
@@ -48,23 +38,19 @@ export default function Gantt() {
   const before = settings.ganttWeeksBefore;
   const after = settings.ganttWeeksAfter;
   const { load, fromAbs, n } = useLoad(before, after);
-  const [drag, setDrag] = useState<DragState | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
   const nowAbs = utcToAbsWeek(Date.now());
   const trackRef = useRef<HTMLDivElement>(null);
 
-  /** Apply in-flight drag to an entry for rendering. */
-  const effective = (e: Entry) => {
-    if (!drag || drag.id !== e.project.id) return e.schedule;
-    const o = drag.orig;
-    if (drag.kind === 'move')
-      return { ...e.schedule, startWeek: o.startWeek + drag.dWeeks, designerId: drag.targetDesigner === undefined ? o.designerId : drag.targetDesigner };
-    if (drag.kind === 'l') {
-      const d = Math.min(drag.dWeeks, o.duration - 1);
-      return { ...e.schedule, startWeek: o.startWeek + d, duration: o.duration - d };
-    }
-    return { ...e.schedule, duration: Math.max(1, o.duration + drag.dWeeks) };
-  };
+  const { drag, effective: eff, onPointerDown, onKeyDown } = useBarDrag({
+    weeks: n,
+    trackSelector: '.gantt-track',
+    rowAttr: 'designer-row',
+    onCommit: (id, patch) => updateSchedule(id, patch),
+    onClick: openProject,
+    onStart: () => setHover(null),
+  });
+  const effective = (e: Entry) => eff(e.project.id, e.schedule);
 
   const rows: { designer: Designer | null; items: Entry[] }[] = useMemo(() => {
     const byDesigner = new Map<ID | null, Entry[]>();
@@ -80,58 +66,7 @@ export default function Gantt() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, designers, dmap, drag]);
 
-  const onBarPointerDown = (e: React.PointerEvent, entry: Entry, kind: DragState['kind']) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.stopPropagation();
-    setHover(null);
-    const track = (e.currentTarget as HTMLElement).closest('.gantt-track') as HTMLElement;
-    const pxPerWeek = track.getBoundingClientRect().width / n;
-    const s = entry.schedule;
-    let state: DragState = {
-      id: entry.project.id,
-      kind,
-      startX: e.clientX,
-      pxPerWeek,
-      orig: { startWeek: s.startWeek, duration: s.duration, designerId: s.designerId },
-      dWeeks: 0,
-      targetDesigner: undefined,
-      moved: false,
-    };
-    setDrag(state);
-    const move = (ev: PointerEvent) => {
-      const dWeeks = Math.round((ev.clientX - state.startX) / state.pxPerWeek);
-      let targetDesigner = state.targetDesigner;
-      if (kind === 'move') {
-        const row = document.elementsFromPoint(ev.clientX, ev.clientY).find((el) => (el as HTMLElement).dataset?.designerRow !== undefined) as HTMLElement | undefined;
-        if (row) targetDesigner = row.dataset.designerRow || null;
-      }
-      const moved = state.moved || Math.abs(ev.clientX - state.startX) > 3 || (targetDesigner !== undefined && targetDesigner !== state.orig.designerId);
-      state = { ...state, dWeeks, targetDesigner, moved };
-      setDrag(state);
-    };
-    const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      setDrag(null);
-      if (!state.moved) {
-        openProject(state.id);
-        return;
-      }
-      const o = state.orig;
-      if (state.kind === 'move') {
-        const designerId = state.targetDesigner === undefined ? o.designerId : state.targetDesigner;
-        updateSchedule(state.id, { startWeek: o.startWeek + state.dWeeks, designerId });
-      } else if (state.kind === 'l') {
-        const d = Math.min(state.dWeeks, o.duration - 1);
-        updateSchedule(state.id, { startWeek: o.startWeek + d, duration: o.duration - d });
-      } else {
-        updateSchedule(state.id, { duration: Math.max(1, o.duration + state.dWeeks) });
-      }
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-  };
+  const onBarPointerDown = (e: React.PointerEvent, entry: Entry, kind: DragKind) => onPointerDown(e, entry.project.id, entry.schedule, kind);
 
   const weekCols = `repeat(${n}, 1fr)`;
   const pos = (absStart: number, dur: number) => {
@@ -261,11 +196,7 @@ export default function Gantt() {
                               onBlur={() => setHover(null)}
                               role="button"
                               tabIndex={0}
-                              onKeyDown={(ev) => {
-                                if (ev.key === 'Enter') openProject(e.project.id);
-                                if (ev.key === 'ArrowLeft') updateSchedule(e.project.id, { startWeek: s.startWeek - 1 });
-                                if (ev.key === 'ArrowRight') updateSchedule(e.project.id, { startWeek: s.startWeek + 1 });
-                              }}
+                              onKeyDown={(ev) => onKeyDown(ev, e.project.id, s)}
                               aria-label={`${e.project.name}, ${formatWeekRange(qStart + s.startWeek, s.duration)}`}
                             >
                               <span className="handle l" onPointerDown={(ev) => onBarPointerDown(ev, e, 'l')} />

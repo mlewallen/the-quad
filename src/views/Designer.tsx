@@ -11,7 +11,9 @@ import type { Designer, ID } from '../types';
 import { WEEKS_PER_QUARTER } from '../types';
 import { loadLevel, PAIR_SHARE, summarize, type Entry, type WeekLoad } from '../lib/capacity';
 import { weeklyAllocation } from '../lib/curves';
-import { formatAbsWeek, formatWeekRange } from '../lib/quarters';
+import { formatAbsWeek, formatWeekRange, utcToAbsWeek } from '../lib/quarters';
+import { useBarDrag } from '../lib/useBarDrag';
+import { useStore } from '../store';
 import { ease, readableOn, staggerChild, staggerParent } from '../lib/motion';
 import { Avatar, EmptyState, LoadChip, PriorityChip } from '../components/ui';
 
@@ -340,43 +342,78 @@ function WeeklyChart({
   );
 }
 
+/**
+ * Editable timeline of this designer's work: drag a bar to move it, drag an
+ * end to change duration, click to open, or focus and use arrow keys
+ * (Shift = duration). Shows the quarter plus two weeks of spill-over.
+ */
 function MiniTimeline({
   entries, qStart, colorOf, designerId, dmap,
 }: { entries: Entry[]; qStart: number; colorOf: Map<ID, string>; designerId: ID; dmap: Record<ID, Designer> }) {
-  const n = WEEKS_PER_QUARTER;
+  const AFTER = 2;
+  const n = WEEKS_PER_QUARTER + AFTER;
+  const updateSchedule = useStore((st) => st.updateSchedule);
+  const nowIdx = utcToAbsWeek(Date.now()) - qStart;
+  const { drag, effective, onPointerDown, onKeyDown } = useBarDrag({
+    weeks: n,
+    trackSelector: '.mini-tl-track',
+    onCommit: (id, patch) => updateSchedule(id, patch),
+    onClick: openProject,
+  });
+  const cols = `repeat(${n}, 1fr)`;
   return (
     <div className="mini-tl">
-      <div className="mini-tl-head" style={{ gridTemplateColumns: `repeat(${n}, 1fr)` }}>
-        {Array.from({ length: n }, (_, i) => <span key={i}>{i % 2 === 0 ? formatAbsWeek(qStart + i) : ''}</span>)}
+      <div className="mini-tl-row head">
+        <span />
+        <div className="mini-tl-head" style={{ gridTemplateColumns: cols }}>
+          {Array.from({ length: n }, (_, i) => (
+            <span key={i} className={`${i === nowIdx ? 'now' : ''} ${i >= WEEKS_PER_QUARTER ? 'after' : ''}`} title={formatAbsWeek(qStart + i, true)}>
+              {i >= WEEKS_PER_QUARTER ? `+${i - WEEKS_PER_QUARTER + 1}` : i + 1}
+            </span>
+          ))}
+        </div>
       </div>
       {entries.map((e, i) => {
-        const s = e.schedule;
+        const s = effective(e.project.id, e.schedule);
         const l = Math.max(0, s.startWeek);
         const r = Math.min(n, s.startWeek + s.duration);
         const color = colorOf.get(e.project.id) ?? 'var(--text-3)';
         const pairing = s.designerId !== designerId;
+        const dragging = drag?.id === e.project.id;
         return (
           <div key={e.project.id} className="mini-tl-row">
-            <div className="mini-tl-grid" style={{ gridTemplateColumns: `repeat(${n}, 1fr)` }}>{Array.from({ length: n }, (_, k) => <span key={k} />)}</div>
-            {r > l && (
-              <motion.button
-                className={`mini-tl-bar ${s.confirmed ? '' : 'unconfirmed'} ${pairing ? 'pairing' : ''}`}
-                style={{ left: `${(l / n) * 100}%`, width: `${((r - l) / n) * 100}%`, '--c': color, transformOrigin: 'left' } as React.CSSProperties}
-                initial={{ scaleX: 0, opacity: 0 }}
-                animate={{ scaleX: 1, opacity: 1 }}
-                transition={{ delay: 0.05 + i * 0.04, duration: 0.4, ease: ease.out }}
-                onClick={() => openProject(e.project.id)}
-                title={`${e.project.name} · ${s.phase}${pairing ? ` · pairing with ${dmap[s.designerId ?? '']?.name ?? '—'}` : ''}`}
-              >
-                <span className="ellipsis">{e.project.name}</span>
-                {s.milestones.map((m) => (
-                  <span key={m.id} className="milestone" style={{ left: `${((m.offset + 0.5) / s.duration) * 100}%` }} />
-                ))}
-              </motion.button>
-            )}
+            <button className="mini-tl-label ellipsis" onClick={() => openProject(e.project.id)} title={e.project.name}>{e.project.name}</button>
+            <div className="mini-tl-track">
+              <div className="mini-tl-grid" style={{ gridTemplateColumns: cols }}>
+                {Array.from({ length: n }, (_, k) => <span key={k} className={`${k === nowIdx ? 'now' : ''} ${k >= WEEKS_PER_QUARTER ? 'after' : ''}`} />)}
+              </div>
+              {r > l && (
+                <motion.div
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${e.project.name}, ${formatWeekRange(qStart + s.startWeek, s.duration)}. Drag to move, arrow keys to nudge.`}
+                  className={`mini-tl-bar ${s.confirmed ? '' : 'unconfirmed'} ${pairing ? 'pairing' : ''} ${dragging ? 'dragging' : ''}`}
+                  style={{ left: `${(l / n) * 100}%`, width: `${((r - l) / n) * 100}%`, '--c': color, transformOrigin: 'left' } as React.CSSProperties}
+                  initial={{ scaleX: 0, opacity: 0 }}
+                  animate={{ scaleX: 1, opacity: 1 }}
+                  transition={{ delay: 0.05 + i * 0.04, duration: 0.4, ease: ease.out }}
+                  onPointerDown={(ev) => onPointerDown(ev, e.project.id, e.schedule, 'move')}
+                  onKeyDown={(ev) => onKeyDown(ev, e.project.id, e.schedule)}
+                  title={`${e.project.name} · ${s.phase} · ${formatWeekRange(qStart + s.startWeek, s.duration)}${pairing ? ` · pairing with ${dmap[s.designerId ?? '']?.name ?? '—'}` : ''}`}
+                >
+                  <span className="handle l" onPointerDown={(ev) => onPointerDown(ev, e.project.id, e.schedule, 'l')} />
+                  <span className="ellipsis">{dragging ? formatWeekRange(qStart + s.startWeek, s.duration) : `${s.allocation}%`}</span>
+                  {s.milestones.map((m) => (
+                    <span key={m.id} className="milestone" style={{ left: `${((m.offset + 0.5) / s.duration) * 100}%` }} />
+                  ))}
+                  <span className="handle r" onPointerDown={(ev) => onPointerDown(ev, e.project.id, e.schedule, 'r')} />
+                </motion.div>
+              )}
+            </div>
           </div>
         );
       })}
+      <span className="tiny faint" style={{ marginTop: 4 }}>Drag bars to reschedule, drag an edge to change duration. Focus a bar and use ←/→ (Shift to resize).</span>
     </div>
   );
 }

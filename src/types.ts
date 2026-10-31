@@ -65,6 +65,18 @@ export interface Project {
   productArea: string;
   notes: string;
   createdAt: number;
+  /** Set when the project came from (or is linked to) an external tracker. */
+  external?: ExternalRef;
+}
+
+export type ExternalSource = 'jira' | 'asana' | 'servicenow' | 'linear' | 'sheet' | 'paste';
+
+export interface ExternalRef {
+  source: ExternalSource;
+  /** The tracker's own key/id (e.g. ABC-123, an Asana gid, a ServiceNow number). */
+  id: string;
+  url?: string;
+  syncedAt: number;
 }
 
 export interface Milestone {
