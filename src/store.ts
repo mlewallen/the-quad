@@ -6,9 +6,10 @@ import type {
 import { DEFAULT_SETTINGS, DESIGNER_COLORS, defaultConfig } from './lib/defaults';
 import { currentQuarter } from './lib/quarters';
 import { defaultAllocation, recommendedDuration } from './lib/sizing';
+import { celebrationTitle, type CelebrationId } from './lib/celebrations';
 
 export const STORAGE_KEY = 'the-quad';
-export const STATE_VERSION = 2;
+export const STATE_VERSION = 3;
 
 export const uid = () => crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 
@@ -17,6 +18,8 @@ export const planKey = (workspaceId: ID, quarter: number) => `${workspaceId}:${q
 export interface Celebration {
   id: number;
   message: string;
+  /** Title of a celebration unlocked for the first time by this moment. */
+  unlocked?: string;
 }
 
 export interface NewInitiative {
@@ -65,7 +68,7 @@ interface Actions {
   clearQuarter(): void;
   factoryReset(): void;
   replaceAll(data: PersistedState): void;
-  celebrate(message: string): void;
+  celebrate(id: CelebrationId, message: string): void;
   dismissCelebration(): void;
 }
 
@@ -84,6 +87,7 @@ function initialState(): PersistedState {
     currentQuarter: currentQuarter(DEFAULT_SETTINGS.fiscalStartMonth),
     settings: { ...DEFAULT_SETTINGS },
     totalPlansCreated: 0,
+    unlocked: {},
   };
 }
 
@@ -150,9 +154,9 @@ export const useStore = create<Store>()(
         const prevPhases = phaseTargets.map((id) => before?.schedules[id]?.phase);
         mutate();
         const after = get().plans.find((p) => p.id === planId);
-        if (!wasAll && allConfirmed(after)) get().celebrate(`Every assignment in ${after!.name} is confirmed`);
+        if (!wasAll && allConfirmed(after)) get().celebrate('all-confirmed', `Every assignment in ${after!.name} is confirmed`);
         else if (phaseTargets.some((id, i) => !isApprove(prevPhases[i]) && isApprove(after?.schedules[id]?.phase)))
-          get().celebrate('Moved to Approve — nice progress');
+          get().celebrate('approve', 'Moved to Approve — nice progress');
       };
 
       return {
@@ -372,7 +376,7 @@ export const useStore = create<Store>()(
               return { ...p, schedules };
             }),
           }));
-          if (quarterWasEmpty) get().celebrate('First initiative of the quarter — off to a good start');
+          if (quarterWasEmpty) get().celebrate('first-initiative', 'First initiative of the quarter — off to a good start');
           return created.map((p) => p.id);
         },
 
@@ -462,9 +466,12 @@ export const useStore = create<Store>()(
           get().ensurePlan();
         },
 
-        celebrate(message) {
+        celebrate(id, message) {
+          // Unlocks are recorded even when the animation is switched off.
+          const isNew = !(id in get().unlocked);
+          if (isNew) set((st) => ({ unlocked: { ...st.unlocked, [id]: Date.now() } }));
           if (!get().settings.celebrations) return;
-          set({ celebration: { id: Date.now(), message } });
+          set({ celebration: { id: Date.now(), message, unlocked: isNew ? celebrationTitle(id) : undefined } });
         },
 
         dismissCelebration() {
@@ -479,7 +486,7 @@ export const useStore = create<Store>()(
           activePlan: { ...s.activePlan, [planKey(plan.workspaceId, plan.quarter)]: plan.id },
           totalPlansCreated: total,
         }));
-        if (total === 10) get().celebrate('Ten plans created — you are a scenario machine');
+        if (total === 10) get().celebrate('ten-plans', 'Ten plans created — you are a scenario machine');
       }
     },
     {
@@ -553,5 +560,9 @@ export function migrate(raw: Partial<PersistedState>, version: number): Persiste
     state.totalPlansCreated = Math.max(state.totalPlansCreated ?? 0, state.plans.length);
   }
   state.disruptions = (state.disruptions ?? []).map((d) => ({ ...d, curve: d.curve ?? { shape: 'flat' } }));
+  // Backfill unlocks that are provable from existing data (time unknown -> 0).
+  state.unlocked = { ...(state.unlocked ?? {}) };
+  if (state.projects.length && !('first-initiative' in state.unlocked)) state.unlocked['first-initiative'] = 0;
+  if (state.totalPlansCreated >= 10 && !('ten-plans' in state.unlocked)) state.unlocked['ten-plans'] = 0;
   return state;
 }

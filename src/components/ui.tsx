@@ -28,17 +28,17 @@ export function LoadChip({ pct }: { pct: number }) {
 }
 
 /** Overlay + dialog with spring entrance. Must be rendered inside <AnimatePresence>. */
-export function Modal({ onClose, children, wide }: { onClose: () => void; children: ReactNode; wide?: boolean }) {
+export function Modal({ onClose, children, wide, size }: { onClose: () => void; children: ReactNode; wide?: boolean; size?: 'settings' }) {
   useEscape(onClose);
   return (
     <motion.div
-      className="overlay"
+      className={`overlay ${size === 'settings' ? 'center' : ''}`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: 0.14 } }}
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <motion.div className={`modal ${wide ? 'wide' : ''}`} role="dialog" aria-modal="true" variants={dialogIn} initial="initial" animate="animate" exit="exit">
+      <motion.div className={`modal ${wide ? 'wide' : ''} ${size ?? ''}`} role="dialog" aria-modal="true" variants={dialogIn} initial="initial" animate="animate" exit="exit">
         {children}
       </motion.div>
     </motion.div>
@@ -244,5 +244,14 @@ export function Slider({
       ))}
       <span className="slider-bubble" aria-hidden>{format(value)}</span>
     </div>
+  );
+}
+
+/** iOS-style toggle; a button with role="switch" so it's keyboard and screen-reader friendly. */
+export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} className={`switch ${checked ? 'on' : ''}`} onClick={() => onChange(!checked)}>
+      <motion.span className="switch-knob" layout transition={{ type: 'spring', stiffness: 700, damping: 40 }} />
+    </button>
   );
 }

@@ -118,10 +118,6 @@ export default function Import() {
 
   return (
     <div className="col" style={{ gap: 14 }}>
-      <div>
-        <h2>Import</h2>
-        <p className="small muted">Bring {workspace.config.labels.initiatives.toLowerCase()} in from a spreadsheet. They land in the current quarter.</p>
-      </div>
 
       {stage === 'input' && (
         <>

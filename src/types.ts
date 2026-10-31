@@ -146,4 +146,6 @@ export interface PersistedState {
   currentQuarter: number;
   settings: Settings;
   totalPlansCreated: number;
+  /** Celebration id -> time first unlocked (0 = unlocked before tracking existed). */
+  unlocked: Record<string, number>;
 }

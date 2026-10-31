@@ -124,7 +124,7 @@ export default function App() {
             </Modal>
           )}
           {route.settings && (
-            <Modal key="settings" wide onClose={() => navigate({ settings: null })}>
+            <Modal key="settings" size="settings" onClose={() => navigate({ settings: null })}>
               <SettingsPanel section={route.settings} />
             </Modal>
           )}

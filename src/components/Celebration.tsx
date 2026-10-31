@@ -61,6 +61,7 @@ export default function Celebration() {
       <canvas ref={canvas} className="confetti" key={celebration.id} />
       <div className="celebrate-toast" role="status" onClick={dismiss}>
         🎉 {celebration.message}
+        {celebration.unlocked && <span className="celebrate-unlock">Unlocked “{celebration.unlocked}”</span>}
       </div>
     </>
   );

@@ -89,3 +89,17 @@ describe('migration', () => {
     expect('designerId' in s.projects[0]).toBe(false);
   });
 });
+
+describe('celebration unlocks', () => {
+  it('backfills provable unlocks when migrating v2 data', () => {
+    const v2 = {
+      version: 2,
+      workspaces: [{ id: 'w', name: 'W', designers: [], config: undefined }],
+      projects: [project('a')],
+      plans: [],
+      totalPlansCreated: 12,
+    };
+    const s = migrate(v2 as never, 2);
+    expect(s.unlocked).toEqual({ 'first-initiative': 0, 'ten-plans': 0 });
+  });
+});
