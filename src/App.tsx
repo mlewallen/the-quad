@@ -19,8 +19,9 @@ import Disruptions from './views/Disruptions';
 import Focus from './views/Focus';
 import Manage from './views/Manage';
 import Backlog from './views/Backlog';
+import DesignerView from './views/Designer';
 
-const VIEW_COMPONENTS = { home: Home, gantt: Gantt, allocation: Allocation, disruptions: Disruptions, focus: Focus, manage: Manage, backlog: Backlog };
+const VIEW_COMPONENTS = { home: Home, gantt: Gantt, allocation: Allocation, disruptions: Disruptions, focus: Focus, manage: Manage, backlog: Backlog, designer: DesignerView };
 
 function useTheme() {
   const { theme, accent, uiScale } = useStore((s) => s.settings);
@@ -53,7 +54,7 @@ function useShortcuts(enabled: boolean) {
       const t = e.target instanceof Element ? e.target : null;
       if (e.metaKey || e.ctrlKey || e.altKey || t?.closest('input, textarea, select, [contenteditable], [role=dialog], [role=alertdialog], .palette')) return;
       const n = Number(e.key);
-      if (n >= 1 && n <= VIEWS.length) navigate({ view: VIEWS[n - 1].id, page: false });
+      if (n >= 1 && n <= VIEWS.length) navigate({ view: VIEWS[n - 1].id, page: false, designer: null });
       if (e.key === '[') {
         const s = useStore.getState();
         s.updateSettings({ sidebarCollapsed: !s.settings.sidebarCollapsed });
@@ -94,13 +95,13 @@ export default function App() {
   return (
     <MotionConfig reducedMotion="user">
       <div className="app">
-        <Sidebar view={route.view} />
+        <Sidebar view={route.view} designerId={route.designer} />
         <div className="content">
-          <TopBar view={route.view} />
+          <TopBar view={route.view} designerId={route.designer} />
           <div className="workarea">
             <main className="main">
               <AnimatePresence mode="wait" initial={false}>
-                <motion.div key={showPage ? `page:${route.project}` : route.view} variants={fadeUp} initial="initial" animate="animate" exit="exit" className="view-host">
+                <motion.div key={showPage ? `page:${route.project}` : route.view === 'designer' ? `designer:${route.designer}` : route.view} variants={fadeUp} initial="initial" animate="animate" exit="exit" className="view-host">
                   {showPage ? (
                     <div className="full-page">
                       <ProjectDetail id={route.project!} mode="page" />

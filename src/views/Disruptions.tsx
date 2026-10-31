@@ -9,7 +9,7 @@ import type { Disruption, ID } from '../types';
 import { WEEKS_PER_QUARTER } from '../types';
 import { absWeekFromInput, dateInputValue, formatWeekRange } from '../lib/quarters';
 import CurveEditor from '../components/CurveEditor';
-import { Avatar, EmptyState, Field, TextInput } from '../components/ui';
+import { Avatar, EmptyState, Field, Slider, TextInput } from '../components/ui';
 
 export default function Disruptions() {
   const designers = useDesigners();
@@ -118,9 +118,10 @@ function DisruptionEditor({ d, onDone }: { d: Disruption; onDone: () => void }) 
           <input className="input sm" type="number" min={1} max={52} value={d.duration} onChange={(e) => up({ duration: Math.max(1, Number(e.target.value) || 1) })} />
         </Field>
       </div>
-      <Field label={`Allocation — ${d.allocation}%`}>
-        <input type="range" min={5} max={100} step={5} value={d.allocation} onChange={(e) => up({ allocation: Number(e.target.value) })} />
-      </Field>
+      <div className="field">
+        <div className="row"><label className="label">Allocation</label><span className="spacer" /><b className="num">{d.allocation}%</b></div>
+        <Slider value={d.allocation} min={5} max={100} step={5} onChange={(v) => up({ allocation: v })} ariaLabel="Disruption allocation" format={(v) => `${v}%`} color="var(--text-3)" />
+      </div>
       <span className="tiny muted">{formatWeekRange(d.startAbsWeek, d.duration)}</span>
       {d.duration > 1 && <CurveEditor curve={d.curve} duration={d.duration} max={d.allocation} onChange={(curve) => up({ curve })} color="var(--text-3)" />}
       <Field label="Applies to">

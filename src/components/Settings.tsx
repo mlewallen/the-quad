@@ -8,7 +8,7 @@ import type { FieldLabels, PersistedState, TeamType, ThemeMode } from '../types'
 import { ACCENT_PRESETS, DESIGNER_COLORS, TEAM_TYPES } from '../lib/defaults';
 import { MONTHS, quarterLabel } from '../lib/quarters';
 import Import from './Import';
-import { Avatar, Field, ListEditor, TextInput } from './ui';
+import { Avatar, Field, ListEditor, Slider, TextInput } from './ui';
 
 const SECTIONS: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'appearance', label: 'Appearance', icon: Palette },
@@ -69,9 +69,10 @@ function Appearance() {
           <input type="color" value={s.accent} onChange={(e) => update({ accent: e.target.value })} aria-label="Custom accent" />
         </div>
       </Field>
-      <Field label={`UI scale — ${Math.round(s.uiScale * 100)}%`}>
-        <input type="range" min={0.8} max={1.3} step={0.05} value={s.uiScale} onChange={(e) => update({ uiScale: Number(e.target.value) })} style={{ maxWidth: 320 }} />
-      </Field>
+      <div className="field" style={{ maxWidth: 340 }}>
+        <div className="row"><label className="label">UI scale</label><span className="spacer" /><b className="num">{Math.round(s.uiScale * 100)}%</b></div>
+        <Slider value={s.uiScale} min={0.8} max={1.3} step={0.05} onChange={(v) => update({ uiScale: v })} ariaLabel="UI scale" format={(v) => `${Math.round(v * 100)}%`} marks={[1]} />
+      </div>
       <Field label="Open details as">
         <div className="segmented">
           {(['panel', 'modal', 'page'] as const).map((m) => (

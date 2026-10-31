@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { ChartArea, ChartGantt, Users } from 'lucide-react';
 import { readableOn, spring } from '../lib/motion';
@@ -9,7 +9,7 @@ import {
 import type { Designer, Disruption, ID } from '../types';
 import { WEEKS_PER_QUARTER } from '../types';
 import type { Entry, WeekLoad } from '../lib/capacity';
-import { summarize } from '../lib/capacity';
+import { loadLevel, summarize } from '../lib/capacity';
 import { weeklyAllocation } from '../lib/curves';
 import { formatAbsWeek, formatWeekRange, utcToAbsWeek } from '../lib/quarters';
 import { Avatar, EmptyState, HealthStrip, LoadChip, PriorityChip, Toolbar } from '../components/ui';
@@ -32,6 +32,8 @@ interface Hover {
 }
 
 const LANE_H = 32;
+/** Height of the per-designer load lane (chart + health strip). */
+const LOAD_H = 52;
 
 export default function Gantt() {
   const settings = useStore((s) => s.settings);
@@ -191,17 +193,28 @@ export default function Gantt() {
             return (
               <div key={designer?.id ?? 'unassigned'} className={`gantt-row ${isDropTarget ? 'drop-target' : ''}`} data-designer-row={designer?.id ?? ''}>
                 <div className="gantt-label">
-                  <div className="row">
-                    <Avatar designer={designer ?? undefined} />
-                    <b className="ellipsis">{designer?.name ?? 'Unassigned'}</b>
-                  </div>
-                  {stats ? (
-                    <div className="row tiny muted">
-                      <span>avg</span> <LoadChip pct={stats.avg} />
-                      <span>peak</span> <LoadChip pct={stats.peak} />
+                  <div className="gantt-label-top">
+                    <div className="row">
+                      <Avatar designer={designer ?? undefined} />
+                      {designer ? (
+                        <a className="designer-link ellipsis" href={`#/designer/${designer.id}`} title={`Open ${designer.name}'s view`}>{designer.name}</a>
+                      ) : (
+                        <b className="ellipsis">Unassigned</b>
+                      )}
                     </div>
-                  ) : (
-                    <span className="tiny faint">Drag a bar onto a designer to assign it</span>
+                    {!designer && <span className="tiny faint">Drag a bar onto a designer to assign it</span>}
+                    {designer && stats && stats.over > 0 && (
+                      <span className="tiny" style={{ color: 'var(--over)' }}>{stats.over} week{stats.over > 1 ? 's' : ''} over capacity</span>
+                    )}
+                  </div>
+                  {stats && (
+                    <div className="gantt-label-load" style={{ height: LOAD_H }}>
+                      <span className="label">Load</span>
+                      <div className="row" style={{ gap: 6 }}>
+                        <span className="load-stat"><span>avg</span><LoadChip pct={stats.avg} /></span>
+                        <span className="load-stat"><span>peak</span><LoadChip pct={stats.peak} /></span>
+                      </div>
+                    </div>
                   )}
                 </div>
                 <div className="gantt-track">
@@ -210,6 +223,7 @@ export default function Gantt() {
                       <div key={i} className={`${outside(i) ? 'outside' : ''} ${fromAbs + i === nowAbs ? 'now' : ''}`} />
                     ))}
                   </div>
+                  <div className="gantt-bars-area">
                   {settings.ganttMode === 'bars' || !designer ? (
                     <>
                       {myDisruptions.map((d) => <DisruptionOverlay key={d.id} d={d} pos={pos} />)}
@@ -266,12 +280,12 @@ export default function Gantt() {
                           );
                         })}
                       </div>
-                      {weeks && <TrendLine weeks={weeks} />}
                     </>
                   ) : (
                     <StackedArea weeks={weeks!} entries={items} dmapColor={designer.color} />
                   )}
-                  {weeks && <HealthStrip values={weeks.map((w) => w.total)} />}
+                  </div>
+                  {weeks && designer && <LoadLane weeks={weeks} color={designer.color} />}
                 </div>
               </div>
             );
@@ -328,16 +342,52 @@ function DisruptionOverlay({ d, pos }: { d: Disruption; pos: (a: number, dur: nu
   );
 }
 
-function TrendLine({ weeks }: { weeks: WeekLoad[] }) {
+/**
+ * Per-designer weekly load, in its own lane under the bars. The area is the
+ * designer's color up to 100% and turns red above it; the health strip below
+ * repeats the green/yellow/red level per week.
+ */
+function LoadLane({ weeks, color }: { weeks: WeekLoad[]; color: string }) {
+  const uid = useId().replace(/:/g, '');
   const n = weeks.length;
-  const max = Math.max(150, ...weeks.map((w) => w.total));
-  const y = (v: number) => 100 - (v / max) * 100;
-  const pts = weeks.map((w, i) => `${((i + 0.5) / n) * 100},${y(w.total)}`).join(' ');
+  // SVG units == CSS px (lane minus the 9px health strip), so dots/labels can share y().
+  const SVG_H = LOAD_H - 9;
+  const H = SVG_H - 8;
+  const totals = weeks.map((w) => w.total);
+  const max = Math.max(125, ...totals);
+  const y = (v: number) => 4 + H - (Math.min(v, max) / max) * H;
+  const xs = totals.map((_, i) => ((i + 0.5) / n) * 100);
+  const line = totals.map((v, i) => `${xs[i]},${y(v)}`);
+  const top = [`0,${y(totals[0] ?? 0)}`, ...line, `100,${y(totals[n - 1] ?? 0)}`];
+  const area = `M0,${4 + H} L${top.join(' L')} L100,${4 + H} Z`;
+  const cap = y(100);
   return (
-    <svg className="trend" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: 'calc(100% - 6px)' }}>
-      <line x1="0" x2="100" y1={y(100)} y2={y(100)} stroke="var(--over)" strokeWidth="1" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" opacity="0.5" />
-      <polyline points={pts} fill="none" stroke="var(--text-2)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" opacity="0.7" />
-    </svg>
+    <div className="load-lane" style={{ height: LOAD_H }}>
+      <svg viewBox={`0 0 100 ${SVG_H}`} preserveAspectRatio="none" aria-hidden>
+        <defs>
+          <linearGradient id={`g${uid}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor={color} stopOpacity="0.45" />
+            <stop offset="1" stopColor={color} stopOpacity="0.06" />
+          </linearGradient>
+          <clipPath id={`below${uid}`}><rect x="0" y={cap} width="100" height={SVG_H} /></clipPath>
+          <clipPath id={`above${uid}`}><rect x="0" y="0" width="100" height={cap} /></clipPath>
+        </defs>
+        <path d={area} fill={`url(#g${uid})`} clipPath={`url(#below${uid})`} />
+        <path d={area} fill="var(--over)" fillOpacity="0.28" clipPath={`url(#above${uid})`} />
+        <polyline points={top.join(' ')} fill="none" stroke={color} strokeWidth="1.75" vectorEffect="non-scaling-stroke" clipPath={`url(#below${uid})`} strokeLinejoin="round" />
+        <polyline points={top.join(' ')} fill="none" stroke="var(--over)" strokeWidth="1.75" vectorEffect="non-scaling-stroke" clipPath={`url(#above${uid})`} strokeLinejoin="round" />
+        <line x1="0" x2="100" y1={cap} y2={cap} stroke="var(--over)" strokeOpacity="0.55" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+      </svg>
+      <span className="cap-label" style={{ top: cap - 7 }}>100%</span>
+      <div className="lane-hits" style={{ gridTemplateColumns: `repeat(${n}, 1fr)` }}>
+        {weeks.map((w, i) => (
+          <div key={i} title={`${formatAbsWeek(w.absWeek)}: ${Math.round(w.total)}% (${Math.round(w.projects)}% work${w.disruptions ? `, ${Math.round(w.disruptions)}% disruptions` : ''})`}>
+            <span className={`lane-dot lvl-${loadLevel(w.total)}`} style={{ top: y(w.total) }} />
+          </div>
+        ))}
+      </div>
+      <HealthStrip values={totals} />
+    </div>
   );
 }
 

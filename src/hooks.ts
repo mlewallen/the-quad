@@ -119,8 +119,10 @@ export function useLoad(weeksBefore = 0, weeksAfter = 0): { load: Record<ID, Wee
 
 /* ---------- Hash routing ---------- */
 
-export type View = 'home' | 'gantt' | 'allocation' | 'disruptions' | 'focus' | 'manage' | 'backlog';
-export const VIEWS: { id: View; label: string; description: string }[] = [
+export type View = 'home' | 'gantt' | 'allocation' | 'disruptions' | 'focus' | 'manage' | 'backlog' | 'designer';
+/** Views shown in the sidebar nav; 'designer' is reached per person. */
+export type NavView = Exclude<View, 'designer'>;
+export const VIEWS: { id: NavView; label: string; description: string }[] = [
   { id: 'home', label: 'Home', description: 'Plans, initiatives and team load at a glance' },
   { id: 'gantt', label: 'Gantt', description: 'Drag to schedule, resize to change duration' },
   { id: 'allocation', label: 'Allocation', description: 'Weekly load per designer' },
@@ -136,6 +138,8 @@ export interface Route {
   project: ID | null;
   page: boolean;
   settings: string | null;
+  /** Designer id for the personal designer view. */
+  designer: ID | null;
 }
 
 export function parseHash(hash: string): Route {
@@ -143,19 +147,23 @@ export function parseHash(hash: string): Route {
   const params = new URLSearchParams(query);
   const parts = path.split('/').filter(Boolean);
   if (parts[0] === 'project' && parts[1]) {
-    return { view: (params.get('from') as View) || 'gantt', project: parts[1], page: true, settings: null };
+    return { view: (params.get('from') as View) || 'gantt', project: parts[1], page: true, settings: null, designer: params.get('d') };
+  }
+  if (parts[0] === 'designer' && parts[1]) {
+    return { view: 'designer', project: params.get('p'), page: false, settings: params.get('settings'), designer: parts[1] };
   }
   const view = (VIEWS.find((v) => v.id === parts[0])?.id ?? 'gantt') as View;
-  return { view, project: params.get('p'), page: false, settings: params.get('settings') };
+  return { view, project: params.get('p'), page: false, settings: params.get('settings'), designer: null };
 }
 
 export function buildHash(r: Route): string {
-  if (r.page && r.project) return `#/project/${r.project}?from=${r.view}`;
+  if (r.page && r.project) return `#/project/${r.project}?from=${r.view}${r.view === 'designer' && r.designer ? `&d=${r.designer}` : ''}`;
   const params = new URLSearchParams();
   if (r.project) params.set('p', r.project);
   if (r.settings) params.set('settings', r.settings);
   const q = params.toString();
-  return `#/${r.view}${q ? `?${q}` : ''}`;
+  const path = r.view === 'designer' && r.designer ? `designer/${r.designer}` : r.view === 'designer' ? 'home' : r.view;
+  return `#/${path}${q ? `?${q}` : ''}`;
 }
 
 export function useRoute(): Route {
@@ -180,6 +188,10 @@ export function navigate(patch: Partial<Route>, replace = false) {
 export function openProject(id: ID) {
   const mode = useStore.getState().settings.detailMode;
   navigate({ project: id, page: mode === 'page', settings: null });
+}
+
+export function openDesigner(id: ID) {
+  navigate({ view: 'designer', designer: id, project: null, page: false, settings: null });
 }
 
 export function closeProject() {

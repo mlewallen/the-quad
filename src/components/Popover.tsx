@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { popIn } from '../lib/motion';
 
 /**
- * Anchored popover. `trigger` receives the open state and a toggle; the panel
- * closes on outside click, Escape, or when a child calls `close`.
+ * Anchored popover, rendered in a portal on <body> so it is never clipped by
+ * an ancestor's overflow (e.g. the sidebar). Position is computed from the
+ * trigger's rect and kept in sync on scroll/resize. Closes on outside click,
+ * Escape, or when a child calls `close`.
  */
 export function Popover({
   trigger, children, align = 'start', width = 260, side = 'bottom',
@@ -16,44 +19,68 @@ export function Popover({
   width?: number;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [style, setStyle] = useState<CSSProperties>({});
+  const anchor = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+
+  const place = () => {
+    const el = anchor.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    // Match the app's UI-scale zoom: lengths on a zoomed element are multiplied
+    // by the zoom, so viewport positions are divided by it.
+    const z = Number(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1;
+    const w = width * z;
+    const gap = 6 * z;
+    const vw = window.innerWidth;
+    let top: number;
+    let left: number;
+    let origin: string;
+    if (side === 'right') [top, left, origin] = [r.top, Math.min(r.right + gap, vw - w - 8), 'left top'];
+    else if (align === 'end') [top, left, origin] = [r.bottom + gap, Math.max(8, r.right - w), 'top right'];
+    else [top, left, origin] = [r.bottom + gap, Math.min(r.left, vw - w - 8), 'top left'];
+    setStyle({ top: top / z, left: left / z, width, zoom: z, transformOrigin: origin });
+  };
+
+  useLayoutEffect(() => {
+    if (open) place();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!anchor.current?.contains(t) && !panel.current?.contains(t)) setOpen(false);
+    };
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    const onMove = () => place();
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onMove);
+    window.addEventListener('scroll', onMove, true);
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onMove);
+      window.removeEventListener('scroll', onMove, true);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const pos =
-    side === 'right'
-      ? { left: 'calc(100% + 8px)', bottom: 0 }
-      : align === 'end'
-        ? { right: 0, top: 'calc(100% + 6px)' }
-        : { left: 0, top: 'calc(100% + 6px)' };
-
   return (
-    <div className="popover-anchor" ref={ref}>
+    <div className="popover-anchor" ref={anchor}>
       {trigger({ open, toggle: () => setOpen((o) => !o) })}
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            className="popover"
-            role="menu"
-            style={{ width, ...pos, transformOrigin: side === 'right' ? 'left bottom' : align === 'end' ? 'top right' : 'top left' }}
-            variants={popIn}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-          >
-            {children(() => setOpen(false))}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {createPortal(
+        <AnimatePresence>
+          {open && (
+            <motion.div ref={panel} className="popover" role="menu" style={style} variants={popIn} initial="initial" animate="animate" exit="exit">
+              {children(() => setOpen(false))}
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
   );
 }

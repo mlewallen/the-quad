@@ -1,11 +1,11 @@
 import { motion } from 'motion/react';
 import { Users } from 'lucide-react';
 import { useStore } from '../store';
-import { openProject, useDesigners, useEntries, useLoad, useQuarterStart } from '../hooks';
+import { openDesigner, openProject, useDesigners, useEntries, useLoad, useQuarterStart } from '../hooks';
 import { summarize } from '../lib/capacity';
 import { formatAbsWeek, formatWeekRange } from '../lib/quarters';
 import { staggerChild, staggerParent } from '../lib/motion';
-import { Avatar, EmptyState, LoadChip, Sparkline } from '../components/ui';
+import { Avatar, EmptyState, LoadChip, Slider, Sparkline } from '../components/ui';
 
 export default function Allocation() {
   const designers = useDesigners();
@@ -28,7 +28,7 @@ export default function Allocation() {
               <div className="row">
                 <Avatar designer={d} size="lg" />
                 <div className="col" style={{ gap: 0 }}>
-                  <b>{d.name}</b>
+                  <button className="designer-link link-btn" onClick={() => openDesigner(d.id)}>{d.name}</button>
                   <span className="tiny faint">
                     {mine.length} assigned · peak {Math.round(s.peak)}%
                     {s.over ? <span style={{ color: 'var(--over)' }}> · {s.over} wks over</span> : ''}
@@ -51,14 +51,15 @@ export default function Allocation() {
                       <span className="spacer" />
                       <span className="small num" style={{ fontWeight: 600 }}>{e.schedule.allocation}%</span>
                     </div>
-                    <input
-                      type="range"
+                    <Slider
+                      value={e.schedule.allocation}
                       min={5}
                       max={100}
                       step={5}
-                      value={e.schedule.allocation}
-                      aria-label={`Allocation for ${e.project.name}`}
-                      onChange={(ev) => updateSchedule(e.project.id, { allocation: Number(ev.target.value) })}
+                      color={d.color}
+                      ariaLabel={`Allocation for ${e.project.name}`}
+                      format={(v) => `${v}%`}
+                      onChange={(v) => updateSchedule(e.project.id, { allocation: v })}
                     />
                     <span className="tiny faint">{formatWeekRange(qStart + e.schedule.startWeek, e.schedule.duration)} · {e.schedule.phase}</span>
                   </div>

@@ -207,3 +207,42 @@ export function EmptyState({ icon: Icon, title, children, action }: { icon: Luci
 export function Toolbar({ children }: { children: ReactNode }) {
   return <div className="toolbar">{children}</div>;
 }
+
+/**
+ * Native range input (keeps keyboard + screen reader support) with a styled
+ * filled track, soft thumb, and a value bubble that appears while dragging.
+ */
+export function Slider({
+  value, min, max, step = 1, onChange, ariaLabel, format = (v) => `${v}`, color, marks,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  onChange: (v: number) => void;
+  ariaLabel: string;
+  format?: (v: number) => string;
+  color?: string;
+  /** Optional reference ticks under the track, e.g. [50] for a halfway marker. */
+  marks?: number[];
+}) {
+  const frac = (Math.min(max, Math.max(min, value)) - min) / (max - min || 1);
+  return (
+    <div className="slider" style={{ '--frac': frac, ...(color ? { '--fill': color } : {}) } as React.CSSProperties}>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        aria-label={ariaLabel}
+        aria-valuetext={format(value)}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+      {marks?.map((m) => (
+        <span key={m} className="slider-mark" style={{ '--mfrac': (m - min) / (max - min) } as React.CSSProperties} />
+      ))}
+      <span className="slider-bubble" aria-hidden>{format(value)}</span>
+    </div>
+  );
+}

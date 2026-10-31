@@ -1,19 +1,19 @@
 import { motion } from 'motion/react';
 import {
-  CalendarOff, ChartGantt, Check, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, Focus, Gauge, Inbox, LayoutDashboard,
+  CalendarOff, ChartGantt, Check, Layers, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, Focus, Gauge, Inbox, LayoutDashboard,
   Monitor, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings, Sun, Table2, type LucideIcon,
 } from 'lucide-react';
 import { useStore } from '../store';
 import {
-  entriesFor, navigate, openProject, useActivePlan, useDesigners, useEntries, useLoad, useQuarterPlans, useQuarterProjects, useWorkspace, VIEWS, type View,
+  entriesFor, navigate, openDesigner, openProject, useActivePlan, useDesigners, useEntries, useLoad, useQuarterPlans, useQuarterProjects, useWorkspace, VIEWS, type NavView, type View,
 } from '../hooks';
 import { useFeedback, toast } from '../feedback';
-import { summarize } from '../lib/capacity';
+import { loadLevel as loadLevelOf, summarize } from '../lib/capacity';
 import { formatDate, quarterLabel, quarterStartUtc } from '../lib/quarters';
 import { spring } from '../lib/motion';
 import { MenuDivider, MenuItem, MenuLabel, Popover } from './Popover';
 
-export const VIEW_ICONS: Record<View, LucideIcon> = {
+export const VIEW_ICONS: Record<NavView, LucideIcon> = {
   home: LayoutDashboard,
   gantt: ChartGantt,
   allocation: Gauge,
@@ -26,7 +26,7 @@ export const VIEW_ICONS: Record<View, LucideIcon> = {
 export const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 export const MOD = isMac ? '⌘' : 'Ctrl';
 
-export function Sidebar({ view }: { view: View }) {
+export function Sidebar({ view, designerId }: { view: View; designerId: string | null }) {
   const collapsed = useStore((s) => s.settings.sidebarCollapsed);
   const theme = useStore((s) => s.settings.theme);
   const update = useStore((s) => s.updateSettings);
@@ -35,7 +35,7 @@ export function Sidebar({ view }: { view: View }) {
   const { load } = useLoad();
   const backlog = entries.filter((e) => !e.schedule.designerId).length;
   const overloaded = designers.filter((d) => summarize(load[d.id] ?? []).over > 0).length;
-  const counts: Partial<Record<View, { n: number; tone?: 'danger' }>> = {
+  const counts: Partial<Record<NavView, { n: number; tone?: 'danger' }>> = {
     backlog: backlog ? { n: backlog } : undefined,
     allocation: overloaded ? { n: overloaded, tone: 'danger' } : undefined,
   };
@@ -45,7 +45,7 @@ export function Sidebar({ view }: { view: View }) {
   return (
     <motion.aside
       className={`sidebar ${collapsed ? 'collapsed' : ''}`}
-      animate={{ width: collapsed ? 64 : 236 }}
+      animate={{ width: collapsed ? 56 : 236 }}
       transition={spring.smooth}
       initial={false}
     >
@@ -67,6 +67,38 @@ export function Sidebar({ view }: { view: View }) {
           );
         })}
       </nav>
+
+      {designers.length > 0 && (
+        <div className="nav-group">
+          {!collapsed && <div className="nav-section">Team</div>}
+          {collapsed && <div className="nav-divider" />}
+          <nav className="nav" aria-label="Designers">
+            {designers.map((d) => {
+              const on = view === 'designer' && designerId === d.id;
+              const st = summarize(load[d.id] ?? []);
+              return (
+                <a
+                  key={d.id}
+                  href={`#/designer/${d.id}`}
+                  className={`nav-item ${on ? 'on' : ''}`}
+                  title={collapsed ? `${d.name} · ${Math.round(st.avg)}% avg` : undefined}
+                  aria-current={on ? 'page' : undefined}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    openDesigner(d.id);
+                  }}
+                >
+                  {on && <motion.span layoutId="nav-active" className="nav-active" transition={spring.snappy} />}
+                  <span className="nav-avatar" style={{ background: d.color }}>{d.name[0]?.toUpperCase()}</span>
+                  {!collapsed && <span className="nav-label ellipsis">{d.name}</span>}
+                  {!collapsed && <span className={`nav-load lvl-text-${loadLevelOf(st.avg)}`}>{Math.round(st.avg)}%</span>}
+                  {collapsed && st.over > 0 && <span className="nav-count dot-only danger" />}
+                </a>
+              );
+            })}
+          </nav>
+        </div>
+      )}
 
       <div className="sidebar-foot">
         <button className="nav-item" onClick={() => update({ theme: nextTheme })} title={`Theme: ${theme} (click for ${nextTheme})`}>
@@ -137,14 +169,19 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-export function TopBar({ view }: { view: View }) {
+export function TopBar({ view, designerId }: { view: View; designerId: string | null }) {
   const q = useStore((s) => s.currentQuarter);
   const sm = useStore((s) => s.settings.fiscalStartMonth);
   const setQuarter = useStore((s) => s.setQuarter);
   const addInitiatives = useStore((s) => s.addInitiatives);
   const setPalette = useFeedback((s) => s.setPaletteOpen);
   const workspace = useWorkspace()!;
-  const meta = VIEWS.find((v) => v.id === view)!;
+  const designers = useDesigners();
+  const person = view === 'designer' ? designers.find((d) => d.id === designerId) : undefined;
+  const meta = VIEWS.find((v) => v.id === view) ?? {
+    label: person?.name ?? 'Designer',
+    description: 'Quarterly workload, projects and insights',
+  };
   const start = quarterStartUtc(q, sm);
   // Quarters are 13 weeks; show Monday of week 1 through Friday of week 13.
   const end = start + (13 * 7 - 3) * 86_400_000;
@@ -153,14 +190,14 @@ export function TopBar({ view }: { view: View }) {
   return (
     <header className="topbar">
       <div className="col" style={{ gap: 1, minWidth: 0 }}>
-        <motion.h1 key={view} className="page-title" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+        <motion.h1 key={view + (designerId ?? '')} className="page-title" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
           {meta.label}
         </motion.h1>
         <span className="page-sub ellipsis">{meta.description}</span>
       </div>
       <span className="spacer" />
 
-      <div className="quarter-stepper" role="group" aria-label="Quarter">
+      <div className="ctx-control quarter-stepper" role="group" aria-label="Quarter">
         <button className="btn icon ghost sm" aria-label="Previous quarter" onClick={() => setQuarter(q - 1)}><ChevronLeft size={16} /></button>
         <div className="col" style={{ gap: 0, alignItems: 'center', minWidth: 104 }}>
           <motion.span key={q} className="q" initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
@@ -201,16 +238,20 @@ function PlanSwitcher() {
     <Popover
       align="end"
       width={280}
-      trigger={({ toggle, open }) => (
-        <button className={`plan-trigger ${open ? 'open' : ''}`} onClick={toggle} aria-haspopup="menu" aria-expanded={open}>
-          <span className="plan-dot" />
-          <span className="col" style={{ gap: 0, alignItems: 'flex-start' }}>
-            <span className="tiny faint" style={{ lineHeight: 1.1 }}>Plan</span>
-            <span className="plan-name">{plan?.name}</span>
-          </span>
-          <ChevronsUpDown size={14} className="faint" />
-        </button>
-      )}
+      trigger={({ toggle, open }) => {
+        const assigned = plan ? entriesFor(projects, plan).filter((e) => e.schedule.designerId).length : 0;
+        const idx = plans.findIndex((p) => p.id === plan?.id);
+        return (
+          <button className={`ctx-control plan-trigger ${open ? 'open' : ''}`} onClick={toggle} aria-haspopup="menu" aria-expanded={open} aria-label={`Plan: ${plan?.name}`}>
+            <span className="ctx-icon"><Layers size={15} /></span>
+            <span className="col" style={{ gap: 0, alignItems: 'flex-start', minWidth: 0 }}>
+              <span className="plan-name">{plan?.name}</span>
+              <span className="ctx-sub">Plan {idx + 1} of {plans.length} · {assigned}/{projects.length} assigned</span>
+            </span>
+            <ChevronsUpDown size={14} className="faint" style={{ marginLeft: 2 }} />
+          </button>
+        );
+      }}
     >
       {(close) => (
         <>

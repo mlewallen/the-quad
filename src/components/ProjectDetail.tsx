@@ -13,7 +13,7 @@ import { effortWeeks, weeklyAllocation } from '../lib/curves';
 import { formatAbsWeek, formatWeekRange } from '../lib/quarters';
 import { effortFor, phaseBreakdown, recommendedDurationForCurve } from '../lib/sizing';
 import CurveEditor from './CurveEditor';
-import { DesignerSelect, Field, Section, TextInput } from './ui';
+import { DesignerSelect, Field, Section, Slider, TextInput } from './ui';
 
 export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMode }) {
   const entry = useEntry(id);
@@ -185,9 +185,10 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
                 </div>
               </Field>
             </div>
-            <Field label={`Max allocation — ${s.allocation}%`}>
-              <input type="range" min={5} max={100} step={5} value={s.allocation} onChange={(e) => us({ allocation: Number(e.target.value) })} />
-            </Field>
+            <div className="field">
+              <div className="row"><label className="label">Max allocation</label><span className="spacer" /><b className="num">{s.allocation}%</b></div>
+              <Slider value={s.allocation} min={5} max={100} step={5} onChange={(v) => us({ allocation: v })} ariaLabel="Max allocation" format={(v) => `${v}%`} color={designer?.color} marks={[50]} />
+            </div>
             <div className="row small muted">
               <span className="row" style={{ gap: 6 }}><CalendarRange size={14} /> {formatWeekRange(qStart + s.startWeek, s.duration)}</span>
               <span className="spacer" />

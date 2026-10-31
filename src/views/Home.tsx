@@ -4,7 +4,7 @@ import { CircleCheck, Copy, Pencil, Plus, Trash2 } from 'lucide-react';
 import { confirmDialog, toast } from '../feedback';
 import { spring, staggerChild, staggerParent } from '../lib/motion';
 import { useStore } from '../store';
-import { entriesFor, openProject, useActivePlan, useDesigners, useEntries, useLoad, useQuarterPlans, useQuarterProjects, useWorkspace, useWorkspaceDisruptions } from '../hooks';
+import { entriesFor, openDesigner, openProject, useActivePlan, useDesigners, useEntries, useLoad, useQuarterPlans, useQuarterProjects, useWorkspace, useWorkspaceDisruptions } from '../hooks';
 import type { Plan } from '../types';
 import { WEEKS_PER_QUARTER } from '../types';
 import { computeLoad, loadLevel, summarize } from '../lib/capacity';
@@ -159,7 +159,7 @@ function TeamColumn() {
             <motion.div key={d.id} className="team-row" variants={staggerChild}>
               <div className="row">
                 <Avatar designer={d} />
-                <b className="ellipsis">{d.name}</b>
+                <button className="designer-link link-btn ellipsis" onClick={() => openDesigner(d.id)}>{d.name}</button>
                 <span className="spacer" />
                 <LoadChip pct={s.avg} />
               </div>

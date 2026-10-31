@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ArrowRight, ChevronLeft, ChevronRight, Copy, FileText, Moon, PanelLeftClose, Plus, Search, Settings, Upload } from 'lucide-react';
 import { useStore } from '../store';
-import { navigate, openProject, useActivePlan, useDesignerMap, useEntries, useWorkspace, VIEWS } from '../hooks';
+import { navigate, openDesigner, openProject, useActivePlan, useDesignerMap, useDesigners, useEntries, useWorkspace, VIEWS } from '../hooks';
 import { toast, useFeedback } from '../feedback';
 import { dialogIn } from '../lib/motion';
 import { VIEW_ICONS } from './Shell';
@@ -44,6 +44,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const entries = useEntries();
   const dmap = useDesignerMap();
   const plan = useActivePlan();
+  const designers = useDesigners();
   const workspace = useWorkspace()!;
   const s = useStore.getState();
 
@@ -52,8 +53,17 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
     return [
       ...VIEWS.map((v, i) => {
         const Icon = VIEW_ICONS[v.id];
-        return { id: `view:${v.id}`, group: 'Go to', label: v.label, hint: String(i + 1), icon: <Icon size={16} />, keywords: v.description, run: () => navigate({ view: v.id, project: null, page: false }) };
+        return { id: `view:${v.id}`, group: 'Go to', label: v.label, hint: String(i + 1), icon: <Icon size={16} />, keywords: v.description, run: () => navigate({ view: v.id, project: null, page: false, designer: null }) };
       }),
+      ...designers.map((d) => ({
+        id: `d:${d.id}`,
+        group: 'Designers',
+        label: d.name,
+        hint: 'Designer view',
+        icon: <span className="nav-avatar" style={{ background: d.color }}>{d.name[0]?.toUpperCase()}</span>,
+        keywords: 'person team workload',
+        run: () => openDesigner(d.id),
+      })),
       { id: 'new', group: 'Actions', label: `New ${label.toLowerCase()}`, icon: <Plus size={16} />, run: () => { const [id] = s.addInitiatives([{ name: `New ${label.toLowerCase()}` }]); if (id) openProject(id); } },
       { id: 'plan:new', group: 'Actions', label: 'New blank plan', icon: <Plus size={16} />, run: () => { s.createPlan(); toast('Blank plan created', { tone: 'success' }); } },
       ...(plan ? [{ id: 'plan:dup', group: 'Actions', label: `Duplicate ${plan.name}`, icon: <Copy size={16} />, run: () => { s.duplicatePlan(plan.id); toast(`Duplicated ${plan.name}`, { tone: 'success' }); } }] : []),
@@ -73,7 +83,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
         run: () => openProject(e.project.id),
       })),
     ];
-  }, [entries, dmap, plan, workspace, s]);
+  }, [entries, dmap, plan, workspace, s, designers]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

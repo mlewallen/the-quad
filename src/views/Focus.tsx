@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
 import { Users } from 'lucide-react';
-import { openProject, useDesigners, useEntries, useQuarterStart } from '../hooks';
+import { openDesigner, openProject, useDesigners, useEntries, useQuarterStart } from '../hooks';
 import { formatWeekRange } from '../lib/quarters';
 import { staggerChild, staggerParent } from '../lib/motion';
 import { Avatar, EmptyState, PriorityChip } from '../components/ui';
@@ -21,7 +21,7 @@ export default function Focus() {
             <motion.div key={d.id} className="card card-pad" variants={staggerChild}>
               <div className="row" style={{ marginBottom: 8 }}>
                 <Avatar designer={d} size="lg" />
-                <b>{d.name}</b>
+                <button className="designer-link link-btn" onClick={() => openDesigner(d.id)}>{d.name}</button>
                 <span className="spacer" />
                 <span className="chip">{mine.length}</span>
               </div>
