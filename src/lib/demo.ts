@@ -8,7 +8,7 @@ import { recommendedDuration } from './sizing';
 /**
  * A realistic 10-designer workspace for demos and stress testing: ~44
  * projects, two plan scenarios, disruptions, milestones, pairs, a few
- * overloads and some unassigned work. Deterministic, so screenshots and
+ * overloads, some unassigned work and a ranked backlog of unscheduled ideas. Deterministic, so screenshots and
  * bug reports are reproducible.
  */
 
@@ -80,6 +80,15 @@ const AREAS: Record<string, { pm: string; em: string; projects: [string, Size, P
   },
 };
 
+/** Unscheduled ideas waiting in the backlog, already ranked. */
+const UNSCHEDULED: [string, Size, Priority, string, string][] = [
+  ['Notifications inbox', 'L', 'P1', 'Design', 'Platform'],
+  ['Dark mode', 'XL', 'P2', 'Design', 'Design system'],
+  ['Help center redesign', 'M', 'P2', 'Design', 'Onboarding'],
+  ['Localization readiness review', 'M', 'P2', 'Consult', 'Platform'],
+  ['Wishlist and saved items', 'L', 'P3', 'Design', 'Checkout'],
+];
+
 const GOALS = ['Grow paid conversion 15%', 'Halve time-to-value for new teams', 'Ship mobile parity', 'Raise accessibility to WCAG AA', 'Enterprise readiness'];
 const AREA_GOAL: Record<string, string> = {
   Checkout: GOALS[0], Growth: GOALS[0], Search: GOALS[1], Onboarding: GOALS[1], Mobile: GOALS[2], 'Design system': GOALS[3], Platform: GOALS[4],
@@ -135,12 +144,18 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
       // which keeps this quarter near (not far past) the team's capacity.
       const later = priority !== 'P0' && n++ % 5 >= 3;
       (later ? nextQuarter : projects).push({
-        id: makeId(), workspaceId: workspace.id, quarter: later ? quarter + 1 : quarter, name, ticket: `DSN-${ticket++}`, reference: '',
+        id: makeId(), workspaceId: workspace.id, quarter: later ? quarter + 1 : quarter, backlogRank: null, name, ticket: `DSN-${ticket++}`, reference: '',
         workType, size, priority, epic: size === 'XL', pm: info.pm, em: info.em, goal: AREA_GOAL[area], gaTargetWeek: null, gaTargetText: '',
         productArea: area, notes: '', createdAt: Date.now(),
       });
     }
   }
+
+  const unscheduled: Project[] = UNSCHEDULED.map(([name, size, priority, workType, area], i) => ({
+    id: makeId(), workspaceId: workspace.id, quarter: null, backlogRank: i, name, ticket: '', reference: '',
+    workType, size, priority, epic: false, pm: AREAS[area].pm, em: AREAS[area].em, goal: AREA_GOAL[area], gaTargetWeek: null, gaTargetText: '',
+    productArea: area, notes: '', createdAt: Date.now(),
+  }));
 
   // --- Plan A: greedy, priority-first placement ---------------------------
   const PRI = { P0: 0, P1: 1, P2: 2, P3: 3 };
@@ -258,5 +273,5 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
     { id: makeId(), workspaceId: workspace.id, quarter, name: 'Plan B · Rebalanced', createdAt: now + 1, schedules: schedulesB },
     { id: makeId(), workspaceId: workspace.id, quarter: quarter + 1, name: 'Draft', createdAt: now + 2, schedules: draft },
   ];
-  return { workspace, projects: [...projects, ...nextQuarter], plans, disruptions };
+  return { workspace, projects: [...projects, ...nextQuarter, ...unscheduled], plans, disruptions };
 }

@@ -85,6 +85,7 @@ const WEEK_MS = 7 * 86_400_000;
 
 /** Weeks elapsed (fractional) between a schedule's start and `now`. */
 export function weeksIntoSchedule(project: Pick<Project, 'quarter'>, s: Pick<Schedule, 'startWeek'>, startMonth: number, now = Date.now()): number {
+  if (project.quarter == null) return -1; // unscheduled work hasn't started
   return (now - absWeekToUtc(quarterStartAbsWeek(project.quarter, startMonth) + s.startWeek)) / WEEK_MS;
 }
 
@@ -93,7 +94,7 @@ export function weeksIntoSchedule(project: Pick<Project, 'quarter'>, s: Pick<Sch
  * design is still going after GA, zero or less is on time, null if no target.
  */
 export function gaSlipWeeks(project: Pick<Project, 'quarter' | 'gaTargetWeek'>, s: Pick<Schedule, 'startWeek' | 'duration'>, startMonth: number): number | null {
-  if (project.gaTargetWeek == null) return null;
+  if (project.gaTargetWeek == null || project.quarter == null) return null;
   const designEnd = quarterStartAbsWeek(project.quarter, startMonth) + s.startWeek + s.duration - 1;
   return designEnd - project.gaTargetWeek;
 }

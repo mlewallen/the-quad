@@ -5,12 +5,12 @@ import { computeLoad } from './capacity';
 import { balance } from './balancer';
 import { parseDelimited } from './csv';
 import { parseLooseDate, quarterForDate, quarterStartAbsWeek, quarterStartUtc, utcToAbsWeek } from './quarters';
-import { migrate } from '../store';
+import { backlogOf, migrate, useStore } from '../store';
 import { buildDemo } from './demo';
 import type { Project, Schedule } from '../types';
 
 const project = (id: string, extra: Partial<Project> = {}): Project => ({
-  id, workspaceId: 'w', quarter: 2026 * 4, name: id, ticket: '', reference: '', workType: 'Design', size: 'M',
+  id, workspaceId: 'w', quarter: 2026 * 4, backlogRank: null, name: id, ticket: '', reference: '', workType: 'Design', size: 'M',
   priority: 'P2', epic: false, pm: '', em: '', goal: '', gaTargetWeek: null, gaTargetText: '', productArea: '', notes: '', createdAt: 0, ...extra,
 });
 const sched = (extra: Partial<Schedule> = {}): Schedule => ({
@@ -201,6 +201,44 @@ describe('GA target migration', () => {
   });
 });
 
+describe('backlog', () => {
+  it('migrates v6 projects as planned work with no backlog rank (v6 → v7)', () => {
+    const { backlogRank: _r, ...old } = project('a');
+    const s = migrate({ version: 6, workspaces: [], projects: [old], plans: [] } as never, 6);
+    expect(s.projects[0]).toMatchObject({ quarter: 2026 * 4, backlogRank: null });
+  });
+
+  it('ranks unscheduled work, and moves projects between the backlog and quarters', () => {
+    const q = 2027 * 4;
+    const ws = { id: 'w', name: 'W', designers: [{ id: 'd', name: 'D', color: '#000' }], config: migrate({ workspaces: [{ id: 'w', name: 'W', designers: [] }] } as never, 7).workspaces[0].config };
+    useStore.setState({
+      workspaces: [ws], activeWorkspaceId: 'w', currentQuarter: q,
+      projects: [project('a', { quarter: q })],
+      plans: [{ id: 'p', workspaceId: 'w', quarter: q, name: 'Plan A', createdAt: 0, schedules: { a: sched({ designerId: 'd', confirmed: true }) } }],
+      activePlan: { [`w:${q}`]: 'p' },
+    });
+    const st = useStore.getState();
+    const [x, y] = st.addToBacklog(['X', 'Y']);
+    expect(backlogOf(useStore.getState().projects, 'w').map((p) => p.id)).toEqual([x, y]);
+    st.moveInBacklog(y, -1);
+    expect(backlogOf(useStore.getState().projects, 'w').map((p) => p.id)).toEqual([y, x]);
+
+    // Unschedule: out of every plan, onto the bottom of the backlog.
+    st.moveToQuarter(['a'], null);
+    let s = useStore.getState();
+    expect(s.plans[0].schedules.a).toBeUndefined();
+    expect(backlogOf(s.projects, 'w').map((p) => p.id)).toEqual([y, x, 'a']);
+
+    // Plan into a quarter with no plan yet: it gets a Plan A with the project unassigned.
+    st.moveToQuarter([x], q + 1);
+    s = useStore.getState();
+    const next = s.plans.find((p) => p.quarter === q + 1)!;
+    expect(next.schedules[x]).toMatchObject({ designerId: null });
+    expect(s.activePlan[`w:${q + 1}`]).toBe(next.id);
+    expect(s.projects.find((p) => p.id === x)).toMatchObject({ quarter: q + 1, backlogRank: null });
+  });
+});
+
 describe('demo data', () => {
   it('builds a 10-designer workspace with two plans and some unassigned work', () => {
     let n = 0;
@@ -223,6 +261,10 @@ describe('demo data', () => {
     expect(a.filter((s) => !s.designerId).length).toBeGreaterThan(0);
     expect(a.filter((s) => s.confirmed).length).toBeGreaterThan(10);
     expect(demo.disruptions.length).toBeGreaterThan(5);
+    // A ranked backlog of unscheduled ideas.
+    const unscheduled = demo.projects.filter((p) => p.quarter == null);
+    expect(unscheduled.length).toBeGreaterThanOrEqual(3);
+    expect(unscheduled.map((p) => p.backlogRank)).toEqual(unscheduled.map((_, i) => i));
     // Phases mostly follow the schedule, with a couple pinned by hand.
     expect(a.filter((s) => s.phaseOverride).length).toBe(2);
     // Some launches have GA dates, and at least one design schedule runs past its GA.

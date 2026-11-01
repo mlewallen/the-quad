@@ -82,7 +82,7 @@ export function useWorkspaceEntries(): Entry[] {
     }
     const out: Entry[] = [];
     for (const project of projects) {
-      if (project.workspaceId !== ws) continue;
+      if (project.workspaceId !== ws || project.quarter == null) continue;
       const sched = byQuarter.get(project.quarter)?.schedules[project.id];
       if (sched) out.push({ project, schedule: sched });
     }
@@ -139,7 +139,7 @@ export const VIEWS: { id: NavView; label: string; description: string; keywords?
   { id: 'team', label: 'Team', description: 'Each designer’s load, projects and allocation', keywords: 'allocation focus load people' },
   { id: 'projects', label: 'Projects', description: 'Every project this quarter, bulk-editable', keywords: 'manage table list' },
   { id: 'disruptions', label: 'Disruptions', description: 'PTO, on-call and other non-project time' },
-  { id: 'backlog', label: 'Backlog', description: 'Unassigned work and the auto-balancer' },
+  { id: 'backlog', label: 'Backlog', description: 'Unassigned, unscheduled and future work, plus the auto-balancer', keywords: 'ideas requests later unscheduled' },
 ];
 
 /** Views that were merged or renamed; their old hash routes still resolve. */

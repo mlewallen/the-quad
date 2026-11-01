@@ -49,8 +49,10 @@ export interface Workspace {
 export interface Project {
   id: ID;
   workspaceId: ID;
-  /** Quarter index, see lib/quarters.ts */
-  quarter: number;
+  /** Quarter index, see lib/quarters.ts. Null means unscheduled: it sits in the backlog with no plan. */
+  quarter: number | null;
+  /** Order within the unscheduled backlog (lower is higher); null once it's planned into a quarter. */
+  backlogRank: number | null;
   name: string;
   ticket: string;
   reference: string;

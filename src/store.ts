@@ -12,7 +12,7 @@ import { currentDataKey } from './lib/session';
 
 /** The current account's storage key (see lib/session.ts). Read at call time; it changes on sign-in. */
 export const storageKey = () => useStore.persist.getOptions().name ?? currentDataKey();
-export const STATE_VERSION = 6;
+export const STATE_VERSION = 7;
 
 export const uid = () => crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 
@@ -77,6 +77,15 @@ interface Actions {
   updateSchedule(projectId: ID, patch: Partial<Schedule>, planId?: ID): void;
   bulkUpdate(ids: ID[], project: Partial<Project>, schedule: Partial<Schedule>): void;
   deleteProjects(ids: ID[]): void;
+  /** Add unscheduled projects to the bottom of the backlog. */
+  addToBacklog(names: string[]): ID[];
+  /**
+   * Move projects into a quarter (scheduled in each of its plans, unassigned) or,
+   * with null, out of every plan and onto the bottom of the unscheduled backlog.
+   */
+  moveToQuarter(ids: ID[], quarter: number | null): void;
+  /** Swap an unscheduled project with its neighbour in the backlog ranking. */
+  moveInBacklog(id: ID, dir: -1 | 1): void;
   addDisruption(d: Omit<Disruption, 'id' | 'workspaceId'>): void;
   updateDisruption(id: ID, patch: Partial<Disruption>): void;
   removeDisruption(id: ID): void;
@@ -122,11 +131,12 @@ export function defaultSchedule(_ws: Workspace | undefined, project: Pick<Projec
   };
 }
 
-function blankProject(ws: Workspace, quarter: number, name: string): Project {
+function blankProject(ws: Workspace, quarter: number | null, name: string): Project {
   return {
     id: uid(),
     workspaceId: ws.id,
     quarter,
+    backlogRank: null,
     name,
     ticket: '',
     reference: '',
@@ -482,6 +492,57 @@ export const useStore = create<Store>()(
           }));
         },
 
+        addToBacklog(names) {
+          const w = ws();
+          if (!w) return [];
+          let rank = nextRank(w.id);
+          const created = names.map((n) => n.trim()).filter(Boolean).map((name) => ({ ...blankProject(w, null, name), backlogRank: rank++ }));
+          set((s) => ({ projects: [...s.projects, ...created] }));
+          return created.map((p) => p.id);
+        },
+
+        moveToQuarter(ids, quarter) {
+          const idSet = new Set(ids);
+          const s = get();
+          const moving = s.projects.filter((p) => idSet.has(p.id) && p.quarter !== quarter);
+          if (!moving.length) return;
+          const wsId = moving[0].workspaceId;
+          const w = s.workspaces.find((x) => x.id === wsId);
+          let rank = nextRank(wsId);
+          const moved = new Map(moving.map((p) => [p.id, { ...p, quarter, backlogRank: quarter == null ? rank++ : null }]));
+          let plans = s.plans.map((plan) => {
+            const schedules = { ...plan.schedules };
+            for (const p of moving) delete schedules[p.id];
+            if (quarter != null && plan.workspaceId === wsId && plan.quarter === quarter)
+              for (const p of moving) schedules[p.id] = defaultSchedule(w, p);
+            return { ...plan, schedules };
+          });
+          let activePlan = s.activePlan;
+          // A quarter nobody has planned yet gets its first plan.
+          if (quarter != null && !plans.some((p) => p.workspaceId === wsId && p.quarter === quarter)) {
+            const plan: Plan = { id: uid(), workspaceId: wsId, quarter, name: 'Plan A', createdAt: Date.now(), schedules: {} };
+            for (const p of moving) plan.schedules[p.id] = defaultSchedule(w, p);
+            plans = [...plans, plan];
+            activePlan = { ...activePlan, [planKey(wsId, quarter)]: plan.id };
+          }
+          set({ projects: s.projects.map((p) => moved.get(p.id) ?? p), plans, activePlan });
+        },
+
+        moveInBacklog(id, dir) {
+          const s = get();
+          const me = s.projects.find((p) => p.id === id);
+          if (!me || me.quarter != null) return;
+          const list = backlogOf(s.projects, me.workspaceId);
+          const i = list.findIndex((p) => p.id === id);
+          const other = list[i + dir];
+          if (!other) return;
+          // Re-number the whole list so ties from older data can't stall a move.
+          const order = list.map((p) => p.id);
+          [order[i], order[i + dir]] = [order[i + dir], order[i]];
+          const rankOf = new Map(order.map((pid, r) => [pid, r]));
+          set({ projects: s.projects.map((p) => (rankOf.has(p.id) ? { ...p, backlogRank: rankOf.get(p.id)! } : p)) });
+        },
+
         addDisruption(d) {
           const w = ws();
           if (!w) return;
@@ -504,7 +565,7 @@ export const useStore = create<Store>()(
           const s = get();
           const w = ws();
           if (!w) return;
-          const inQ = (x: { workspaceId: ID; quarter: number }) => x.workspaceId === w.id && x.quarter === s.currentQuarter;
+          const inQ = (x: { workspaceId: ID; quarter: number | null }) => x.workspaceId === w.id && x.quarter === s.currentQuarter;
           const { [planKey(w.id, s.currentQuarter)]: _drop, ...activePlan } = s.activePlan;
           set({ projects: s.projects.filter((p) => !inQ(p)), plans: s.plans.filter((p) => !inQ(p)), activePlan });
           get().ensurePlan();
@@ -532,6 +593,11 @@ export const useStore = create<Store>()(
         },
       };
 
+      function nextRank(workspaceId: ID) {
+        const list = backlogOf(get().projects, workspaceId);
+        return list.length ? (list[list.length - 1].backlogRank ?? list.length) + 1 : 0;
+      }
+
       function registerPlan(plan: Plan) {
         const total = get().totalPlansCreated + 1;
         set((s) => ({
@@ -551,6 +617,13 @@ export const useStore = create<Store>()(
     },
   ),
 );
+
+/** A workspace's unscheduled projects in backlog order. */
+export function backlogOf(projects: Project[], workspaceId: ID): Project[] {
+  return projects
+    .filter((p) => p.workspaceId === workspaceId && p.quarter == null)
+    .sort((a, b) => (a.backlogRank ?? Infinity) - (b.backlogRank ?? Infinity) || a.createdAt - b.createdAt);
+}
 
 function normalize(s: Schedule): Schedule {
   return {
@@ -586,10 +659,10 @@ export function migrate(raw: Partial<PersistedState>, version: number): Persiste
   if (version < 2 && (!raw.plans || !raw.plans.length)) {
     const plans = new Map<string, Plan>();
     const projects: Project[] = [];
-    for (const legacy of (raw.projects ?? []) as (Project & Partial<Schedule> & { phase?: string })[]) {
+    for (const legacy of (raw.projects ?? []) as (Project & Partial<Schedule> & { phase?: string; quarter: number })[]) {
       const { designerId, pairDesignerId, phase, startWeek, duration, allocation, curve, confirmed, milestones, ...meta } = legacy;
       const w = state.workspaces.find((x) => x.id === meta.workspaceId);
-      const project = { ...blankProject(w ?? state.workspaces[0], meta.quarter, meta.name), ...meta } as Project;
+      const project = { ...blankProject(w ?? state.workspaces[0], meta.quarter, meta.name), ...meta } as Project & { quarter: number };
       projects.push(project);
       const key = planKey(project.workspaceId, project.quarter);
       if (!plans.has(key))
@@ -652,10 +725,13 @@ export function migrate(raw: Partial<PersistedState>, version: number): Persiste
       const { gaTarget, ...rest } = p as Project & { gaTarget?: string };
       if ((p as Partial<Project>).gaTargetWeek !== undefined) return rest as Project;
       const text = (gaTarget ?? '').trim();
-      const parsed = text ? parseLooseDate(text, quarterStartUtc(p.quarter, sm)) : null;
+      const parsed = text ? parseLooseDate(text, quarterStartUtc(p.quarter ?? state.currentQuarter, sm)) : null;
       return { ...rest, gaTargetWeek: parsed == null ? null : utcToAbsWeek(parsed), gaTargetText: parsed == null ? text : '' };
     });
   }
+  // v7: the backlog can hold unscheduled work (quarter null), ranked by backlogRank.
+  // Everything saved before this was planned into a quarter.
+  if (version < 7) state.projects = state.projects.map((p) => ({ ...p, quarter: p.quarter ?? state.currentQuarter, backlogRank: p.backlogRank ?? null }));
   // Backfill unlocks that are provable from existing data (time unknown -> 0).
   state.unlocked = { ...(state.unlocked ?? {}) };
   if (state.projects.length && !('first-initiative' in state.unlocked)) state.unlocked['first-initiative'] = 0;

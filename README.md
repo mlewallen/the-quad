@@ -26,7 +26,7 @@ The app opens on a sign-in screen. This isn't real authentication yet: an accoun
 
 ## Demo data
 
-To try the app with a realistic team, use **Settings → Data → Load demo team**, the ⌘K palette ("Load demo team"), or the link on the first onboarding screen. Any of these adds a separate workspace (`src/lib/demo.ts`) with 10 designers, ~27 projects this quarter plus a draft for next quarter, two plan scenarios, PTO, on-call and onboarding. Your own data isn't touched. The data is the same every time it loads, and includes a few overloaded designers and some unassigned work so every view has something to show.
+To try the app with a realistic team, use **Settings → Data → Load demo team**, the ⌘K palette ("Load demo team"), or the link on the first onboarding screen. Any of these adds a separate workspace (`src/lib/demo.ts`) with 10 designers, ~27 projects this quarter plus a draft for next quarter, a ranked backlog of unscheduled ideas, two plan scenarios, GA targets, PTO, on-call and onboarding. Your own data isn't touched. The data is the same every time it loads, and includes a few overloaded designers and some unassigned work so every view has something to show.
 
 ## How it's organized
 
@@ -48,5 +48,7 @@ To try the app with a realistic team, use **Settings → Data → Load demo team
 - **Calendar weeks = effort weeks ÷ allocation.** For example, a Large Design project at 50% is about 14 weeks. Shaped curves are adjusted so the recommendation still delivers the full effort.
 - A **pair designer** is counted at half the primary designer's weekly allocation.
 - Load colors: green ≤ 85%, yellow ≤ 100%, red above 100%.
+- A project's **phase follows its schedule**: today's position in the schedule picks a phase from `phaseBreakdown`. Choosing a phase in the project panel pins it until you switch it back to Auto.
+- The **backlog** holds three kinds of work: unassigned projects this quarter (which the auto-balancer places), unscheduled projects with no quarter yet (ranked, `quarter: null`), and projects already slotted into later quarters.
 - Each quarter's capacity also includes work from neighbouring quarters, using each of those quarters' active plans, so spill-over shows up in the Gantt's before/after weeks.
 - **Google Sheets import** reads sheets shared as "Anyone with the link can view" through their CSV export URL. For private sheets, copy the cells and paste them. Full OAuth would need a Google Cloud client ID, which this repo doesn't have yet.

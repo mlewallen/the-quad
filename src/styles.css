@@ -681,6 +681,8 @@ table.data td.check, table.data th.check { width: 32px; padding-right: 0; }
 .team-project:hover { color: var(--accent); }
 .backlog-grid { align-items: start; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); }
 .list-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border); }
+.backlog-rank { list-style: none; margin: 0; padding: 0; }
+.backlog-rank .rank { width: 20px; flex: none; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-3); }
 
 /* =========================================================================
    Designer view

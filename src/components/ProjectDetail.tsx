@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { AlertTriangle, CalendarRange, Diamond, Maximize2, PanelRight, Plus, SquareStack, Trash2, WandSparkles, X } from 'lucide-react';
+import { AlertTriangle, CalendarRange, Diamond, Maximize2, PanelRight, Plus, SquareStack, Trash2, Undo2, WandSparkles, X } from 'lucide-react';
 import { confirmDialog, toast } from '../feedback';
 import { readableOn } from '../lib/motion';
 import { uid, useStore } from '../store';
@@ -25,6 +25,7 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
   const updateProject = useStore((s) => s.updateProject);
   const updateSchedule = useStore((s) => s.updateSchedule);
   const deleteProjects = useStore((s) => s.deleteProjects);
+  const moveToQuarter = useStore((s) => s.moveToQuarter);
   const setMode = useStore((s) => s.updateSettings);
   const sm = useStore((s) => s.settings.fiscalStartMonth);
   const allEntries = useWorkspaceEntries();
@@ -328,6 +329,20 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
           <div className="card-pad row">
             <span className="tiny faint">Metadata is shared across plans; schedule fields belong to the active plan.</span>
             <span className="spacer" />
+            <button
+              className="btn sm ghost"
+              title="Take it out of this quarter's plans and back into the backlog"
+              onClick={async () => {
+                const ok = await confirmDialog({ title: `Move “${p.name}” to the backlog?`, body: 'It leaves every plan this quarter, so its designer and dates are cleared. Its details stay.', confirmLabel: 'Move to backlog' });
+                if (ok) {
+                  closeProject();
+                  moveToQuarter([p.id], null);
+                  toast(`${p.name} moved to the backlog`);
+                }
+              }}
+            >
+              <Undo2 size={13} /> Unschedule
+            </button>
             <button
               className="btn sm ghost danger"
               onClick={async () => {
