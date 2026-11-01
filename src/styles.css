@@ -932,6 +932,22 @@ table.data td.check, table.data th.check { width: 32px; padding-right: 0; }
 .choice:active { transform: scale(0.985); }
 .choice.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: var(--accent-softer); }
 
+/* Onboarding: favorite color */
+.fav-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.choice.fav { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px; }
+.choice.fav.on { border-color: var(--fav); box-shadow: 0 0 0 3px color-mix(in srgb, var(--fav) 22%, transparent); background: color-mix(in srgb, var(--fav) 7%, var(--surface)); }
+.fav-swatch {
+  width: 34px; height: 34px; border-radius: 50%; margin-bottom: 8px; display: grid; place-items: center; color: #fff;
+  background: radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--fav) 55%, #fff), var(--fav) 70%);
+  box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--fav) 70%, transparent), inset 0 0 0 1px rgb(0 0 0 / 0.08);
+  transition: transform 0.25s var(--ease-out);
+}
+.choice.fav:hover .fav-swatch { transform: scale(1.08) rotate(-6deg); }
+.choice.fav.on .fav-swatch { transform: scale(1.1); }
+.fav-theme { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; }
+.fav-custom-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.fav-custom-on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
 /* =========================================================================
    Celebration
    ========================================================================= */
@@ -1105,6 +1121,7 @@ table.data td.check, table.data th.check { width: 32px; padding-right: 0; }
   .home-table .table-wrap { max-height: none; }
   .cards { grid-template-columns: 1fr; gap: 12px; }
   .grid3, .backlog-grid { grid-template-columns: minmax(0, 1fr); }
+  .fav-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   table.data td { white-space: nowrap; }
   .full-page { margin: 0; border-radius: 0; border-left: 0; border-right: 0; }
   table.data th, table.data td { padding: 8px; }
