@@ -5,9 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>The Quad</title>
-    <!-- Hide the badge Netlify injects in the bottom-right corner of deploys. -->
+    <!--
+      Hide the badge Netlify injects in the bottom-right corner of deploys. The
+      button lives inside an iframe (#nl-badge-frame) whose document our CSS
+      can't reach, so hide the iframe itself; !important beats its inline style.
+    -->
     <style>
-      button#nl-badge { display: none !important; }
+      iframe#nl-badge-frame, #nl-badge { display: none !important; }
     </style>
   </head>
   <body>
