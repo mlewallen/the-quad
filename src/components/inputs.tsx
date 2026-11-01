@@ -143,8 +143,10 @@ function Listbox<V extends string | number>({ value, options, label, onPick }: {
 
 /** Styled checkbox. With children, the whole label is the click target and its text is the accessible name. */
 export function Checkbox({
-  checked, onChange, ariaLabel, disabled, indeterminate, children, className = '',
+  checked, onChange, ariaLabel, disabled, indeterminate, children, className = '', autoFocus,
 }: {
+  /** Ask the enclosing dialog's focus hook to start here. */
+  autoFocus?: boolean;
   checked: boolean;
   onChange: (v: boolean, e: MouseEvent) => void;
   ariaLabel?: string;
@@ -161,6 +163,7 @@ export function Checkbox({
       aria-label={ariaLabel}
       disabled={disabled}
       className={`checkbox ${children ? 'with-label' : ''} ${className}`}
+      data-autofocus={autoFocus || undefined}
       onClick={(e) => onChange(!checked, e)}
     >
       <span className={`check-box ${checked || indeterminate ? 'on' : ''}`} aria-hidden>

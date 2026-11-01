@@ -235,7 +235,10 @@ function WorkspaceSwitcher({ collapsed, className = 'sidebar-head' }: { collapse
 
 function usePageMeta(view: View, designerId: string | null) {
   const designers = useDesigners();
+  const route = useRoute();
+  const project = useStore((s) => (route.page && route.project ? s.projects.find((p) => p.id === route.project) : undefined));
   const person = view === 'designer' ? designers.find((d) => d.id === designerId) : undefined;
+  if (project) return { label: project.name, description: 'Project plan: phases, milestones and who’s on it' };
   return VIEWS.find((v) => v.id === view) ?? {
     label: person?.name ?? 'Designer',
     description: 'Quarterly workload, projects and insights',

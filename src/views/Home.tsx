@@ -5,7 +5,7 @@ import {
   Users, Wand2, type LucideIcon,
 } from 'lucide-react';
 import { useStore } from '../store';
-import { confirmDialog, toast } from '../feedback';
+import { confirmDialog, openBalancer, toast } from '../feedback';
 import {
   entriesFor, navigate, openDesigner, openProject, useActivePlan, useDesignerMap, useDesigners, useEntries, useLoad, useQuarterPlans,
   useQuarterProjects, useQuarterStart, useWorkspace, useWorkspaceDisruptions,
@@ -220,7 +220,7 @@ function NextSteps({ r, load, entries, className }: { r: Readiness; load: Record
       id: 'unassigned', tone: 'warn', icon: Inbox,
       title: <>{unassigned.length} {(unassigned.length === 1 ? labels.initiative : labels.initiatives).toLowerCase()} {unassigned.length === 1 ? 'needs' : 'need'} an owner</>,
       sub: unassigned.slice(0, 3).map((e) => e.project.name).join(', ') + (unassigned.length > 3 ? '…' : ''),
-      actions: [{ label: 'Auto-balance', primary: true, icon: Wand2, run: () => navigate({ view: 'backlog', designer: null }) }],
+      actions: [{ label: 'Auto-balance', primary: true, icon: Wand2, run: () => { navigate({ view: 'backlog', designer: null }); openBalancer(); } }],
     });
   }
   const over = designers

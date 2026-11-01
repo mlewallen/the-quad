@@ -4,7 +4,7 @@ import { confirmDialog, toast } from '../feedback';
 import { readableOn } from '../lib/motion';
 import { uid, useStore } from '../store';
 import {
-  closeProject, navigate, useDesignerMap, useDesigners, useEntry, useQuarterStart, useWorkspace, useWorkspaceDisruptions, useWorkspaceEntries,
+  closeProject, navigate, openProjectPage, useDesignerMap, useDesigners, useEntry, useQuarterStart, useWorkspace, useWorkspaceDisruptions, useWorkspaceEntries,
 } from '../hooks';
 import type { DetailMode, Milestone, Project, Schedule } from '../types';
 import { PRIORITIES, SIZES, WEEKS_PER_QUARTER } from '../types';
@@ -49,7 +49,8 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
           <span className="spacer" />
           <button className="btn icon ghost" onClick={closeProject} aria-label="Close"><X size={16} /></button>
         </div>
-        <p className="muted">This item isn't in the current quarter's active plan. It may belong to another quarter or workspace, or was deleted.</p>
+        <p className="muted">This item isn't in the current quarter's active plan. It may belong to another quarter or the backlog, or was deleted.</p>
+        <button className="btn sm" style={{ alignSelf: 'flex-start' }} onClick={() => openProjectPage(id)}>Open its project plan</button>
       </div>
     );
   }
@@ -95,6 +96,7 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
           <span className="tiny faint" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>{labels.initiative}</span>
           {s.confirmed ? <span className="chip ok">Confirmed</span> : <span className="chip">Tentative</span>}
           <span className="spacer" />
+          <button className="btn sm" onClick={() => openProjectPage(p.id)} title="Phases, tasks and milestones on their own page"><Maximize2 size={13} /> Project plan</button>
           <div className="segmented" aria-label="Detail layout">
             {(['panel', 'modal', 'page'] as DetailMode[]).map((m) => (
               <button key={m} className={mode === m ? 'on' : ''} onClick={() => switchMode(m)} title={`Open as ${m}`} aria-label={`Open as ${m}`}>
@@ -384,7 +386,7 @@ function NotesField({ value, onCommit }: { value: string; onCommit: (v: string) 
   );
 }
 
-function LoadChart({
+export function LoadChart({
   weeks, thisWeekly, projectId, color, startWeek,
 }: { weeks: ReturnType<typeof computeLoad>[string]; thisWeekly: number[]; projectId: string; color: string; startWeek: number }) {
   const max = Math.max(120, ...weeks.map((w) => w.total));

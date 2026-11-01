@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { useStore } from './store';
-import { closeProject, navigate, useIsMobile, useRoute, useWorkspace, VIEWS } from './hooks';
+import { closeProject, navigate, parseHash, useIsMobile, useRoute, useWorkspace, VIEWS } from './hooks';
 import { useFeedback } from './feedback';
 import { fadeUp, spring } from './lib/motion';
 import { MobileTopBar, Sidebar, TabBar, TopBar } from './components/Shell';
 import CommandPalette from './components/CommandPalette';
 import { ConfirmHost, Toaster } from './components/Feedback';
 import { ImporterModal } from './components/Importer';
+import { BalancerHost } from './components/BalancerWizard';
 import GlobalIngest from './components/GlobalIngest';
 import Onboarding from './components/Onboarding';
 import Gate from './components/Gate';
@@ -23,6 +24,7 @@ import Disruptions from './views/Disruptions';
 import Projects from './views/Projects';
 import Backlog from './views/Backlog';
 import DesignerView from './views/Designer';
+import ProjectView from './views/ProjectView';
 
 const VIEW_COMPONENTS = { home: Home, gantt: Gantt, team: Team, projects: Projects, disruptions: Disruptions, backlog: Backlog, designer: DesignerView };
 
@@ -57,9 +59,11 @@ function useShortcuts(enabled: boolean) {
         return;
       }
       const t = e.target instanceof Element ? e.target : null;
-      if (e.metaKey || e.ctrlKey || e.altKey || t?.closest('input, textarea, select, [contenteditable], [role=dialog], [role=alertdialog], .palette')) return;
+      // Typing inside menus (type-ahead) and dialogs isn't a shortcut either.
+      if (e.metaKey || e.ctrlKey || e.altKey || t?.closest('input, textarea, select, [contenteditable], [role=dialog], [role=alertdialog], [role=listbox], .palette, .popover')) return;
       const n = Number(e.key);
-      if (n >= 1 && n <= VIEWS.length) navigate({ view: VIEWS[n - 1].id, page: false, designer: null });
+      // Leaving a full project page also leaves the project, so no panel opens for it.
+      if (n >= 1 && n <= VIEWS.length) navigate({ view: VIEWS[n - 1].id, page: false, designer: null, ...(parseHash(window.location.hash).page ? { project: null } : {}) });
       if (e.key === '[') {
         const s = useStore.getState();
         s.updateSettings({ sidebarCollapsed: !s.settings.sidebarCollapsed });
@@ -126,9 +130,7 @@ export default function App() {
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div key={showPage ? `page:${route.project}` : route.view === 'designer' ? `designer:${route.designer}` : route.view} variants={fadeUp} initial="initial" animate="animate" exit="exit" className="view-host">
                   {showPage ? (
-                    <div className="full-page">
-                      <ProjectDetail id={route.project!} mode="page" />
-                    </div>
+                    <ProjectView id={route.project!} />
                   ) : (
                     <ViewComponent />
                   )}
@@ -155,6 +157,7 @@ export default function App() {
         </AnimatePresence>
         <CommandPalette />
         <ImporterModal />
+        <BalancerHost />
         <GlobalIngest />
         <ConfirmHost />
         <Toaster />

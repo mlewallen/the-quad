@@ -40,8 +40,8 @@ To try the app with a realistic team, use **Settings → Data → Load demo team
 | `src/lib/curves.ts` | Flat / front / back / bell / custom allocation curves; custom curves resample when duration changes |
 | `src/lib/sizing.ts` | Size profiles (effort weeks by work type × S/M/L/XL) and the duration recommendation |
 | `src/lib/balancer.ts` | Greedy auto-balancer (even load, priority first, minimize conflicts) |
-| `src/views/*` | Home (readiness, next steps, capacity heatmap), Gantt, Team (per-designer load, projects and allocation), Projects (the bulk-editable table), Disruptions, Backlog, Designer |
-| `src/components/*` | Context bar, project detail, curve editor, onboarding, settings, import |
+| `src/views/*` | Home (readiness, next steps, capacity heatmap), Gantt, Team (per-designer load, projects and allocation), Projects (the bulk-editable table), Disruptions, Backlog, Designer, ProjectView (one project's phase-by-phase plan) |
+| `src/components/*` | Context bar, project detail, curve editor, onboarding, settings, import, the auto-balance wizard, and `inputs.tsx`: the app's own Select, Checkbox, NumberField and ColorField (no native form controls) |
 
 ## Planning rules worth knowing
 
@@ -49,6 +49,7 @@ To try the app with a realistic team, use **Settings → Data → Load demo team
 - A **pair designer** is counted at half the primary designer's weekly allocation.
 - Load colors: green ≤ 85%, yellow ≤ 100%, red above 100%.
 - A project's **phase follows its schedule**: today's position in the schedule picks a phase from `phaseBreakdown`. Choosing a phase in the project panel pins it until you switch it back to Auto.
-- The **backlog** holds three kinds of work: unassigned projects this quarter (which the auto-balancer places), unscheduled projects with no quarter yet (ranked, `quarter: null`), and projects already slotted into later quarters.
+- Each project has a **plan page** (`#/project/<id>`): the phases the designer works through, each with a length and a tracker task key (the project is the epic), plus milestones marked as something the designer delivers or gives input to. It works for this quarter, later quarters and unscheduled backlog work, whose plan is kept as a draft until it's planned into a quarter.
+- The **backlog** holds three kinds of work: unassigned projects this quarter (which the auto-balance wizard places), unscheduled projects with no quarter yet (ranked, `quarter: null`), and projects already slotted into later quarters.
 - Each quarter's capacity also includes work from neighbouring quarters, using each of those quarters' active plans, so spill-over shows up in the Gantt's before/after weeks.
 - **Google Sheets import** reads sheets shared as "Anyone with the link can view" through their CSV export URL. For private sheets, copy the cells and paste them. Full OAuth would need a Google Cloud client ID, which this repo doesn't have yet.
