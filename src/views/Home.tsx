@@ -297,7 +297,7 @@ function NextSteps({ r, load, entries, className }: { r: Readiness; load: Record
                 <b className="small">{s.title}</b>
                 <span className="tiny faint ellipsis">{s.sub}</span>
               </div>
-              <div className="row" style={{ gap: 6, flex: 'none' }}>
+              <div className="row step-actions" style={{ gap: 6, flex: 'none' }}>
                 {s.actions.map((a) => (
                   <button key={a.label} className={`btn sm ${a.primary ? 'primary' : ''}`} onClick={a.run}>
                     {a.icon && <a.icon size={13} />} {a.label}

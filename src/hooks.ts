@@ -197,3 +197,18 @@ export function openDesigner(id: ID) {
 export function closeProject() {
   navigate({ project: null, page: false });
 }
+
+/** Phone layout breakpoint. Kept in sync with the `@media (max-width: 720px)` block in styles.css. */
+export const MOBILE_QUERY = '(max-width: 720px)';
+
+export function useIsMobile(): boolean {
+  const [mobile, setMobile] = useState(() => typeof matchMedia !== 'undefined' && matchMedia(MOBILE_QUERY).matches);
+  useEffect(() => {
+    const mq = matchMedia(MOBILE_QUERY);
+    const on = () => setMobile(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return mobile;
+}

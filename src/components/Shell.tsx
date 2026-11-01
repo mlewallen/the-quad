@@ -1,16 +1,18 @@
-import { motion } from 'motion/react';
+import { useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
-  CalendarOff, ChartGantt, Check, ClipboardPaste, Layers, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, Focus, Gauge, Inbox, LayoutDashboard,
+  CalendarOff, ChartGantt, Check, ClipboardPaste, Ellipsis, Layers, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, Focus, Gauge, Inbox, LayoutDashboard,
   LogOut, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings, Sun, Table2, UserRound, type LucideIcon,
 } from 'lucide-react';
 import { useStore } from '../store';
 import {
-  entriesFor, navigate, openDesigner, openProject, useActivePlan, useDesigners, useEntries, useLoad, useQuarterPlans, useQuarterProjects, useWorkspace, VIEWS, type NavView, type View,
+  entriesFor, navigate, openDesigner, openProject, useActivePlan, useDesigners, useEntries, useLoad, useQuarterPlans, useQuarterProjects, useRoute, useWorkspace, VIEWS, type NavView, type View,
 } from '../hooks';
 import { openImporter, useFeedback, toast } from '../feedback';
 import { loadLevel as loadLevelOf, summarize } from '../lib/capacity';
 import { formatDate, quarterLabel, quarterStartUtc } from '../lib/quarters';
-import { spring } from '../lib/motion';
+import { sheetIn, spring } from '../lib/motion';
+import { useEscape } from './ui';
 import { MenuDivider, MenuItem, MenuLabel, Popover } from './Popover';
 import { signOut, useAccount } from '../account';
 
@@ -27,10 +29,8 @@ export const VIEW_ICONS: Record<NavView, LucideIcon> = {
 export const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 export const MOD = isMac ? '⌘' : 'Ctrl';
 
-export function Sidebar({ view, designerId }: { view: View; designerId: string | null }) {
-  const collapsed = useStore((s) => s.settings.sidebarCollapsed);
-  const theme = useStore((s) => s.settings.theme);
-  const update = useStore((s) => s.updateSettings);
+/** Badges shared by the sidebar and the phone tab bar. */
+function useNavCounts() {
   const entries = useEntries();
   const designers = useDesigners();
   const { load } = useLoad();
@@ -40,8 +40,22 @@ export function Sidebar({ view, designerId }: { view: View; designerId: string |
     backlog: backlog ? { n: backlog } : undefined,
     allocation: overloaded ? { n: overloaded, tone: 'danger' } : undefined,
   };
-  const ThemeIcon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor;
-  const nextTheme = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
+  return { counts, load, designers };
+}
+
+function useThemeCycle() {
+  const theme = useStore((s) => s.settings.theme);
+  const update = useStore((s) => s.updateSettings);
+  const Icon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor;
+  const next = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
+  return { theme, next, Icon, cycle: () => update({ theme: next }) };
+}
+
+export function Sidebar({ view, designerId }: { view: View; designerId: string | null }) {
+  const collapsed = useStore((s) => s.settings.sidebarCollapsed);
+  const update = useStore((s) => s.updateSettings);
+  const { counts, load, designers } = useNavCounts();
+  const { theme, next: nextTheme, Icon: ThemeIcon, cycle } = useThemeCycle();
 
   return (
     <motion.aside
@@ -103,7 +117,7 @@ export function Sidebar({ view, designerId }: { view: View; designerId: string |
 
       <div className="sidebar-foot">
         <UserButton collapsed={collapsed} />
-        <button className="nav-item" onClick={() => update({ theme: nextTheme })} title={`Theme: ${theme} (click for ${nextTheme})`}>
+        <button className="nav-item" onClick={cycle} title={`Theme: ${theme} (click for ${nextTheme})`}>
           <ThemeIcon size={17} strokeWidth={1.75} className="nav-icon" />
           {!collapsed && <span className="nav-label" style={{ textTransform: 'capitalize' }}>{theme} theme</span>}
         </button>
@@ -152,16 +166,16 @@ function UserButton({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
+function WorkspaceSwitcher({ collapsed, className = 'sidebar-head' }: { collapsed: boolean; className?: string }) {
   const workspaces = useStore((s) => s.workspaces);
   const setActive = useStore((s) => s.setActiveWorkspace);
   const ws = useWorkspace()!;
   return (
-    <div className="sidebar-head">
+    <div className={className}>
       <Popover
         width={240}
         trigger={({ toggle, open }) => (
-          <button className={`ws-trigger ${open ? 'open' : ''}`} onClick={toggle} aria-haspopup="menu" aria-expanded={open}>
+          <button className={`ws-trigger ${open ? 'open' : ''}`} onClick={toggle} aria-haspopup="menu" aria-expanded={open} aria-label={`Workspace: ${ws.name}`}>
             <span className="brand-mark" aria-hidden><i /><i /><i /><i /></span>
             {!collapsed && (
               <>
@@ -202,23 +216,52 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-export function TopBar({ view, designerId }: { view: View; designerId: string | null }) {
-  const q = useStore((s) => s.currentQuarter);
-  const sm = useStore((s) => s.settings.fiscalStartMonth);
-  const setQuarter = useStore((s) => s.setQuarter);
-  const addInitiatives = useStore((s) => s.addInitiatives);
-  const setPalette = useFeedback((s) => s.setPaletteOpen);
-  const workspace = useWorkspace()!;
+function usePageMeta(view: View, designerId: string | null) {
   const designers = useDesigners();
   const person = view === 'designer' ? designers.find((d) => d.id === designerId) : undefined;
-  const meta = VIEWS.find((v) => v.id === view) ?? {
+  return VIEWS.find((v) => v.id === view) ?? {
     label: person?.name ?? 'Designer',
     description: 'Quarterly workload, projects and insights',
   };
+}
+
+function useNewProject() {
+  const addInitiatives = useStore((s) => s.addInitiatives);
+  const label = useWorkspace()!.config.labels.initiative;
+  return {
+    label,
+    create: () => {
+      const [id] = addInitiatives([{ name: `New ${label.toLowerCase()}` }]);
+      if (id) openProject(id);
+    },
+  };
+}
+
+function QuarterStepper() {
+  const q = useStore((s) => s.currentQuarter);
+  const sm = useStore((s) => s.settings.fiscalStartMonth);
+  const setQuarter = useStore((s) => s.setQuarter);
   const start = quarterStartUtc(q, sm);
   // Quarters are 13 weeks; show Monday of week 1 through Friday of week 13.
   const end = start + (13 * 7 - 3) * 86_400_000;
-  const label = workspace.config.labels.initiative;
+  return (
+    <div className="ctx-control quarter-stepper" role="group" aria-label="Quarter">
+      <button className="btn icon ghost sm" aria-label="Previous quarter" onClick={() => setQuarter(q - 1)}><ChevronLeft size={16} /></button>
+      <div className="col" style={{ gap: 0, alignItems: 'center', minWidth: 104 }}>
+        <motion.span key={q} className="q" initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
+          {quarterLabel(q)}
+        </motion.span>
+        <span className="sub">{formatDate(start)} – {formatDate(end)}</span>
+      </div>
+      <button className="btn icon ghost sm" aria-label="Next quarter" onClick={() => setQuarter(q + 1)}><ChevronRight size={16} /></button>
+    </div>
+  );
+}
+
+export function TopBar({ view, designerId }: { view: View; designerId: string | null }) {
+  const setPalette = useFeedback((s) => s.setPaletteOpen);
+  const meta = usePageMeta(view, designerId);
+  const { label, create } = useNewProject();
 
   return (
     <header className="topbar">
@@ -230,16 +273,7 @@ export function TopBar({ view, designerId }: { view: View; designerId: string | 
       </div>
       <span className="spacer" />
 
-      <div className="ctx-control quarter-stepper" role="group" aria-label="Quarter">
-        <button className="btn icon ghost sm" aria-label="Previous quarter" onClick={() => setQuarter(q - 1)}><ChevronLeft size={16} /></button>
-        <div className="col" style={{ gap: 0, alignItems: 'center', minWidth: 104 }}>
-          <motion.span key={q} className="q" initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
-            {quarterLabel(q)}
-          </motion.span>
-          <span className="sub">{formatDate(start)} – {formatDate(end)}</span>
-        </div>
-        <button className="btn icon ghost sm" aria-label="Next quarter" onClick={() => setQuarter(q + 1)}><ChevronRight size={16} /></button>
-      </div>
+      <QuarterStepper />
 
       <PlanSwitcher />
 
@@ -250,13 +284,7 @@ export function TopBar({ view, designerId }: { view: View; designerId: string | 
       </button>
 
       <div className="split-btn">
-        <button
-          className="btn primary"
-          onClick={() => {
-            const [id] = addInitiatives([{ name: `New ${label.toLowerCase()}` }]);
-            if (id) openProject(id);
-          }}
-        >
+        <button className="btn primary" onClick={create}>
           <Plus size={16} /> {label}
         </button>
         <button className="btn primary icon" title="Add many: paste, upload or import" aria-label="Add many projects" onClick={() => openImporter()}>
@@ -324,5 +352,166 @@ function PlanSwitcher() {
         </>
       )}
     </Popover>
+  );
+}
+
+/* -------------------------------------------------------------------------
+   Phone shell (below the 720px breakpoint): two-row top bar, bottom tab bar,
+   and a "More" sheet holding everything the sidebar has that the tabs don't.
+   ------------------------------------------------------------------------- */
+
+const TABS: NavView[] = ['home', 'gantt', 'allocation', 'backlog'];
+
+export function MobileTopBar({ view, designerId }: { view: View; designerId: string | null }) {
+  const setPalette = useFeedback((s) => s.setPaletteOpen);
+  const meta = usePageMeta(view, designerId);
+  const { label, create } = useNewProject();
+  return (
+    <header className="m-topbar">
+      <div className="m-topbar-row">
+        <WorkspaceSwitcher collapsed className="m-ws" />
+        <motion.h1 key={view + (designerId ?? '')} className="page-title ellipsis" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+          {meta.label}
+        </motion.h1>
+        <span className="spacer" />
+        <button className="btn icon ghost m-icon-btn" onClick={() => setPalette(true)} aria-label="Search or jump">
+          <Search size={19} />
+        </button>
+        <Popover
+          align="end"
+          width={240}
+          trigger={({ toggle, open }) => (
+            <button className="btn primary icon m-icon-btn" onClick={toggle} aria-haspopup="menu" aria-expanded={open} aria-label={`Add ${label.toLowerCase()}`}>
+              <Plus size={20} />
+            </button>
+          )}
+        >
+          {(close) => (
+            <>
+              <MenuItem icon={<Plus size={15} />} onSelect={() => { close(); create(); }}>New {label.toLowerCase()}</MenuItem>
+              <MenuItem icon={<ClipboardPaste size={15} />} onSelect={() => { close(); openImporter(); }}>Paste or import many…</MenuItem>
+            </>
+          )}
+        </Popover>
+      </div>
+      <div className="m-context">
+        <QuarterStepper />
+        <PlanSwitcher />
+      </div>
+    </header>
+  );
+}
+
+export function TabBar({ view }: { view: View }) {
+  const { counts } = useNavCounts();
+  const [more, setMore] = useState(false);
+  const inMore = !TABS.includes(view as NavView);
+  return (
+    <>
+      <nav className="tabbar" aria-label="Views">
+        {TABS.map((id) => {
+          const v = VIEWS.find((x) => x.id === id)!;
+          const Icon = VIEW_ICONS[id];
+          const on = view === id;
+          const c = counts[id];
+          return (
+            <a key={id} href={`#/${id}`} className={`tab ${on ? 'on' : ''}`} aria-current={on ? 'page' : undefined}>
+              {on && <motion.span layoutId="tab-active" className="tab-active" transition={spring.snappy} />}
+              <span className="tab-icon">
+                <Icon size={21} strokeWidth={on ? 2 : 1.75} />
+                {c && <span className={`tab-badge ${c.tone ?? ''}`}>{c.n > 99 ? '99+' : c.n}</span>}
+              </span>
+              <span className="tab-label">{v.label}</span>
+            </a>
+          );
+        })}
+        <button className={`tab ${inMore || more ? 'on' : ''}`} onClick={() => setMore(true)} aria-haspopup="dialog" aria-expanded={more}>
+          {inMore && <motion.span layoutId="tab-active" className="tab-active" transition={spring.snappy} />}
+          <span className="tab-icon"><Ellipsis size={21} strokeWidth={inMore ? 2 : 1.75} /></span>
+          <span className="tab-label">More</span>
+        </button>
+      </nav>
+      <AnimatePresence>{more && <MoreSheet key="more" view={view} onClose={() => setMore(false)} />}</AnimatePresence>
+    </>
+  );
+}
+
+function MoreSheet({ view, onClose }: { view: View; onClose: () => void }) {
+  const { counts, load, designers } = useNavCounts();
+  const { theme, Icon: ThemeIcon, cycle } = useThemeCycle();
+  const account = useAccount((s) => s.account);
+  const route = useRoute();
+  useEscape(onClose);
+  const go = (fn: () => void) => () => {
+    onClose();
+    fn();
+  };
+  const rest = VIEWS.filter((v) => !TABS.includes(v.id));
+  return (
+    <motion.div className="overlay sheet-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.14 } }} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <motion.div className="modal sheet more-sheet" role="dialog" aria-modal="true" aria-label="More" variants={sheetIn} initial="initial" animate="animate" exit="exit">
+        <span className="sheet-grabber" aria-hidden />
+        <div className="more-grid">
+          {rest.map((v) => {
+            const Icon = VIEW_ICONS[v.id];
+            const c = counts[v.id];
+            return (
+              <button key={v.id} className={`more-tile ${view === v.id ? 'on' : ''}`} onClick={go(() => navigate({ view: v.id, page: false, designer: null, project: null }))}>
+                <Icon size={20} strokeWidth={1.75} />
+                <span>{v.label}</span>
+                {c && <span className={`nav-count ${c.tone ?? ''}`}>{c.n}</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        {designers.length > 0 && (
+          <>
+            <div className="nav-section more-section">Team</div>
+            <div className="more-list">
+              {designers.map((d) => {
+                const st = summarize(load[d.id] ?? []);
+                const on = view === 'designer' && route.designer === d.id;
+                return (
+                  <button key={d.id} className={`more-row ${on ? 'on' : ''}`} onClick={go(() => openDesigner(d.id))}>
+                    <span className="nav-avatar" style={{ background: d.color }}>{d.name[0]?.toUpperCase()}</span>
+                    <span className="ellipsis" style={{ flex: 1, textAlign: 'left' }}>{d.name}</span>
+                    {st.over > 0 && <span className="tiny" style={{ color: 'var(--over)' }}>{st.over} wk over</span>}
+                    <span className={`nav-load lvl-text-${loadLevelOf(st.avg)}`}>{Math.round(st.avg)}%</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        <div className="more-list more-foot">
+          {account && (
+            <button className="more-row" onClick={go(() => navigate({ settings: 'account' }))}>
+              <span className="nav-avatar user-avatar">{account.name[0]?.toUpperCase()}</span>
+              <span className="col" style={{ gap: 0, minWidth: 0, flex: 1, textAlign: 'left' }}>
+                <span className="ellipsis" style={{ fontWeight: 600 }}>{account.name}</span>
+                <span className="ellipsis tiny faint">{account.email}</span>
+              </span>
+            </button>
+          )}
+          <button className="more-row" onClick={cycle}>
+            <ThemeIcon size={18} strokeWidth={1.75} />
+            <span style={{ flex: 1, textAlign: 'left', textTransform: 'capitalize' }}>{theme} theme</span>
+            <span className="tiny faint">Tap to change</span>
+          </button>
+          <button className="more-row" onClick={go(() => navigate({ settings: 'appearance' }))}>
+            <Settings size={18} strokeWidth={1.75} />
+            <span style={{ flex: 1, textAlign: 'left' }}>Settings</span>
+          </button>
+          {account && (
+            <button className="more-row" onClick={go(() => void signOut())}>
+              <LogOut size={18} strokeWidth={1.75} />
+              <span style={{ flex: 1, textAlign: 'left' }}>Sign out</span>
+            </button>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }

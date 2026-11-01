@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { useStore } from './store';
-import { closeProject, navigate, useRoute, useWorkspace, VIEWS } from './hooks';
+import { closeProject, navigate, useIsMobile, useRoute, useWorkspace, VIEWS } from './hooks';
 import { useFeedback } from './feedback';
 import { fadeUp, spring } from './lib/motion';
-import { Sidebar, TopBar } from './components/Shell';
+import { MobileTopBar, Sidebar, TabBar, TopBar } from './components/Shell';
 import CommandPalette from './components/CommandPalette';
 import { ConfirmHost, Toaster } from './components/Feedback';
 import { ImporterModal } from './components/Importer';
@@ -28,7 +28,9 @@ import DesignerView from './views/Designer';
 const VIEW_COMPONENTS = { home: Home, gantt: Gantt, allocation: Allocation, disruptions: Disruptions, focus: Focus, manage: Manage, backlog: Backlog, designer: DesignerView };
 
 function useTheme() {
-  const { theme, accent, uiScale } = useStore((s) => s.settings);
+  const { theme, accent, uiScale: scale } = useStore((s) => s.settings);
+  // Interface scale is a desktop setting; phones have their own text-size controls.
+  const uiScale = useIsMobile() ? 1 : scale;
   const [systemDark, setSystemDark] = useState(() => matchMedia('(prefers-color-scheme: dark)').matches);
   useEffect(() => {
     const mq = matchMedia('(prefers-color-scheme: dark)');
@@ -77,12 +79,18 @@ export default function App() {
   const route = useRoute();
   const detailMode = useStore((s) => s.settings.detailMode);
   const account = useAccount((s) => s.account);
+  const mobile = useIsMobile();
   const ready = !!account && onboarded && !!workspace;
   useShortcuts(ready);
 
   useEffect(() => {
     if (onboarded) ensurePlan();
   }, [onboarded, workspace?.id, ensurePlan]);
+
+  // Tabs on phones start each view at the top, like a native tab bar.
+  useEffect(() => {
+    if (mobile) document.querySelector('.main')?.scrollTo(0, 0);
+  }, [mobile, route.view, route.designer]);
 
   if (!account) {
     return (
@@ -105,14 +113,15 @@ export default function App() {
 
   const ViewComponent = VIEW_COMPONENTS[route.view];
   const showPage = !!route.project && route.page;
-  const mode = route.page ? 'page' : detailMode === 'page' ? 'panel' : detailMode;
+  // Phones have no room for a side panel, so project detail always opens as a sheet there.
+  const mode = route.page ? 'page' : mobile ? 'modal' : detailMode === 'page' ? 'panel' : detailMode;
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="app">
-        <Sidebar view={route.view} designerId={route.designer} />
+      <div className={`app ${mobile ? 'mobile' : ''}`}>
+        {!mobile && <Sidebar view={route.view} designerId={route.designer} />}
         <div className="content">
-          <TopBar view={route.view} designerId={route.designer} />
+          {mobile ? <MobileTopBar view={route.view} designerId={route.designer} /> : <TopBar view={route.view} designerId={route.designer} />}
           <div className="workarea">
             <main className="main">
               <AnimatePresence mode="wait" initial={false}>
@@ -131,6 +140,7 @@ export default function App() {
               {route.project && !showPage && mode === 'panel' && <SidePanel key="panel" id={route.project} />}
             </AnimatePresence>
           </div>
+          {mobile && <TabBar view={route.view} />}
         </div>
         <AnimatePresence>
           {route.project && !showPage && mode === 'modal' && (

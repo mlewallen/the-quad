@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { confirmDialog, toast } from '../feedback';
 import { storageKey, useStore } from '../store';
-import { entriesFor, navigate, useActivePlan, useQuarterProjects, useWorkspace } from '../hooks';
+import { entriesFor, navigate, useActivePlan, useIsMobile, useQuarterProjects, useWorkspace } from '../hooks';
 import type { FieldLabels, PersistedState, TeamType, ThemeMode } from '../types';
 import { ACCENT_PRESETS, TEAM_TYPES } from '../lib/defaults';
 import { CELEBRATIONS, type CelebrationId } from '../lib/celebrations';
@@ -166,6 +166,7 @@ function AccountSettings() {
 function Appearance() {
   const s = useStore((st) => st.settings);
   const update = useStore((st) => st.updateSettings);
+  const mobile = useIsMobile();
   const custom = !ACCENT_PRESETS.includes(s.accent);
   return (
     <>
@@ -193,8 +194,8 @@ function Appearance() {
             </label>
           </div>
         </Row>
-        <Row label="Interface scale" description="Make everything larger or smaller. 100% is the default.">
-          <div className="row" style={{ gap: 12, width: 260 }}>
+        <Row label="Interface scale" description={mobile ? 'Applies on larger screens. Phones use your device’s text size.' : 'Make everything larger or smaller. 100% is the default.'}>
+          <div className="row ui-scale-control" style={{ gap: 12, width: 260 }}>
             <Slider value={s.uiScale} min={0.8} max={1.3} step={0.05} onChange={(v) => update({ uiScale: v })} ariaLabel="Interface scale" format={(v) => `${Math.round(v * 100)}%`} marks={[1]} />
             <b className="num" style={{ width: 40, textAlign: 'right' }}>{Math.round(s.uiScale * 100)}%</b>
           </div>

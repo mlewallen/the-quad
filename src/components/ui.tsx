@@ -3,7 +3,8 @@ import { AnimatePresence, motion } from 'motion/react';
 import { ChevronRight, type LucideIcon } from 'lucide-react';
 import type { Designer } from '../types';
 import { loadLevel } from '../lib/capacity';
-import { dialogIn, ease } from '../lib/motion';
+import { dialogIn, ease, sheetIn } from '../lib/motion';
+import { useIsMobile } from '../hooks';
 
 export function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((s) => s[0]!.toUpperCase()).join('') || '?';
@@ -30,15 +31,18 @@ export function LoadChip({ pct }: { pct: number }) {
 /** Overlay + dialog with spring entrance. Must be rendered inside <AnimatePresence>. */
 export function Modal({ onClose, children, wide, size }: { onClose: () => void; children: ReactNode; wide?: boolean; size?: 'settings' }) {
   useEscape(onClose);
+  // Phones get a bottom sheet instead of a centred dialog.
+  const sheet = useIsMobile();
   return (
     <motion.div
-      className={`overlay ${size === 'settings' ? 'center' : ''}`}
+      className={`overlay ${size === 'settings' ? 'center' : ''} ${sheet ? 'sheet-overlay' : ''}`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: 0.14 } }}
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <motion.div className={`modal ${wide ? 'wide' : ''} ${size ? `${size}-modal` : ''}`} role="dialog" aria-modal="true" variants={dialogIn} initial="initial" animate="animate" exit="exit">
+      <motion.div className={`modal ${wide ? 'wide' : ''} ${size ? `${size}-modal` : ''} ${sheet ? 'sheet' : ''}`} role="dialog" aria-modal="true" variants={sheet ? sheetIn : dialogIn} initial="initial" animate="animate" exit="exit">
+        {sheet && <span className="sheet-grabber" aria-hidden />}
         {children}
       </motion.div>
     </motion.div>

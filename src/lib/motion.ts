@@ -39,6 +39,13 @@ export const dialogIn: Variants = {
   exit: { opacity: 0, scale: 0.98, y: 6, transition: { duration: 0.14, ease: ease.in } },
 };
 
+/** Bottom sheet on phones: slides up from the bottom edge, same spring as dialogs. */
+export const sheetIn: Variants = {
+  initial: { y: '100%' },
+  animate: { y: 0, transition: spring.smooth },
+  exit: { y: '100%', transition: { duration: 0.2, ease: ease.in } },
+};
+
 /** Parent/child pair for staggered list/card reveals. Capped so long lists don't drag. */
 export const staggerParent: Variants = {
   initial: {},
