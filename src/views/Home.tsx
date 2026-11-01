@@ -217,7 +217,7 @@ function NextSteps({ r, load, entries, className }: { r: Readiness; load: Record
   if (unassigned.length) {
     steps.push({
       id: 'unassigned', tone: 'warn', icon: Inbox,
-      title: <>{unassigned.length} {(unassigned.length === 1 ? labels.initiative : labels.initiatives).toLowerCase()} need an owner</>,
+      title: <>{unassigned.length} {(unassigned.length === 1 ? labels.initiative : labels.initiatives).toLowerCase()} {unassigned.length === 1 ? 'needs' : 'need'} an owner</>,
       sub: unassigned.slice(0, 3).map((e) => e.project.name).join(', ') + (unassigned.length > 3 ? '…' : ''),
       actions: [{ label: 'Auto-balance', primary: true, icon: Wand2, run: () => navigate({ view: 'backlog', designer: null }) }],
     });
@@ -297,7 +297,7 @@ function NextSteps({ r, load, entries, className }: { r: Readiness; load: Record
                 <b className="small">{s.title}</b>
                 <span className="tiny faint ellipsis">{s.sub}</span>
               </div>
-              <div className="row" style={{ gap: 6, flex: 'none' }}>
+              <div className="row step-actions" style={{ gap: 6, flex: 'none' }}>
                 {s.actions.map((a) => (
                   <button key={a.label} className={`btn sm ${a.primary ? 'primary' : ''}`} onClick={a.run}>
                     {a.icon && <a.icon size={13} />} {a.label}

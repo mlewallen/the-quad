@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  AlertTriangle, ArrowLeft, CalendarOff, CircleCheck, Diamond, Gauge, Layers, Lightbulb, Sparkles, Timer, UserX, Users,
+  AlertTriangle, ArrowLeft, CalendarOff, CircleCheck, Diamond, Gauge, Layers, Lightbulb, Palette, Sparkles, Timer, UserX, Users,
 } from 'lucide-react';
 import {
   navigate, openDesigner, openProject, useDesignerMap, useDesigners, useEntries, useLoad, useQuarterStart, useRoute, useWorkspace,
@@ -15,7 +15,7 @@ import { formatAbsWeek, formatWeekRange, utcToAbsWeek } from '../lib/quarters';
 import { useBarDrag } from '../lib/useBarDrag';
 import { useStore } from '../store';
 import { ease, readableOn, staggerChild, staggerParent } from '../lib/motion';
-import { Avatar, EmptyState, LoadChip, PriorityChip } from '../components/ui';
+import { Avatar, EmptyState, LoadChip, PriorityChip, TextInput } from '../components/ui';
 
 /** Per-project shade of the designer's color so stacked segments stay distinguishable. */
 function shade(color: string, i: number) {
@@ -50,6 +50,7 @@ function DesignerBody({ designer }: { designer: Designer }) {
   const weeks = load[designer.id] ?? [];
   const stats = summarize(weeks);
   const labels = workspace.config.labels;
+  const updateDesigner = useStore((s) => s.updateDesigner);
 
   const mine = useMemo(
     () =>
@@ -101,11 +102,15 @@ function DesignerBody({ designer }: { designer: Designer }) {
         animate={{ opacity: 1, y: 0, transition: { duration: 0.3, ease: ease.out } }}
       >
         <div className="row" style={{ gap: 14, alignItems: 'flex-start' }}>
-          <span className="hero-avatar" style={{ background: designer.color, color: readableOn(designer.color) }}>
+          <label className="hero-avatar" style={{ background: designer.color, color: readableOn(designer.color) }} title="Change color">
             {designer.name.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase()}
-          </span>
+            <input type="color" value={designer.color} onChange={(e) => updateDesigner(designer.id, { color: e.target.value })} aria-label={`Color for ${designer.name}`} />
+            <span className="hero-avatar-edit" aria-hidden><Palette size={11} /></span>
+          </label>
           <div className="col" style={{ gap: 4, flex: 1, minWidth: 0 }}>
-            <h1 className="ellipsis">{designer.name}</h1>
+            <h1>
+              <TextInput className="hero-name" value={designer.name} ariaLabel="Designer name" onCommit={(v) => v.trim() && updateDesigner(designer.id, { name: v.trim() })} />
+            </h1>
             <div className="row small faint" style={{ flexWrap: 'wrap' }}>
               <span>{workspace.name}</span>·
               <span>{primary} owned · {mine.length - primary} pairing</span>·

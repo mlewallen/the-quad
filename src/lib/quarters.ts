@@ -86,12 +86,3 @@ export function formatWeekRange(startAbs: number, duration: number): string {
   const end = absWeekToUtc(startAbs + Math.max(1, duration) - 1) + 4 * DAY;
   return `${formatDate(start)} – ${formatDate(end, true)}`;
 }
-
-export function dateInputValue(absWeek: number): string {
-  return new Date(absWeekToUtc(absWeek)).toISOString().slice(0, 10);
-}
-
-export function absWeekFromInput(value: string): number | null {
-  const t = Date.parse(value + 'T00:00:00Z');
-  return Number.isNaN(t) ? null : utcToAbsWeek(t);
-}

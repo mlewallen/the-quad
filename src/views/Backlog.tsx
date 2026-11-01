@@ -50,12 +50,12 @@ export default function Backlog() {
         <span className={`chip ${backlog.length ? 'accent' : 'ok'}`}>{backlog.length} unassigned</span>
       </Toolbar>
 
-      <div className="grid2" style={{ alignItems: 'start', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr)' }}>
+      <div className="grid2 backlog-grid">
         <div className="card card-pad col">
           <h2>Unassigned {workspace.config.labels.initiatives.toLowerCase()}</h2>
           <AnimatePresence initial={false}>
           {backlog.map((e) => (
-            <motion.div key={e.project.id} className="list-row" layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, x: 24, transition: { duration: 0.18 } }}>
+            <motion.div key={e.project.id} className="list-row backlog-row" layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, x: 24, transition: { duration: 0.18 } }}>
               <PriorityChip p={e.project.priority} />
               <a href="#" className="ellipsis" style={{ fontWeight: 500 }} onClick={(ev) => { ev.preventDefault(); openProject(e.project.id); }}>
                 {e.project.name}

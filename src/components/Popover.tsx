@@ -30,23 +30,24 @@ export function Popover({
     // Match the app's UI-scale zoom: lengths on a zoomed element are multiplied
     // by the zoom, so viewport positions are divided by it.
     const z = Number(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1;
-    const w = width * z;
-    const gap = 6 * z;
     const vw = window.innerWidth;
+    // Never wider than the viewport (phones); a no-op at desktop sizes.
+    const w = Math.min(width * z, vw - 16);
+    const gap = 6 * z;
     let top: number;
     let left: number;
     let origin: string;
     if (side === 'right') {
       // Near the bottom of the viewport, grow upward from the trigger instead.
       if (r.top > window.innerHeight / 2) {
-        setStyle({ bottom: (window.innerHeight - r.bottom) / z, left: Math.min(r.right + gap, vw - w - 8) / z, width, zoom: z, transformOrigin: 'left bottom' });
+        setStyle({ bottom: (window.innerHeight - r.bottom) / z, left: Math.min(r.right + gap, vw - w - 8) / z, width: w / z, zoom: z, transformOrigin: 'left bottom' });
         return;
       }
       [top, left, origin] = [r.top, Math.min(r.right + gap, vw - w - 8), 'left top'];
     }
     else if (align === 'end') [top, left, origin] = [r.bottom + gap, Math.max(8, r.right - w), 'top right'];
-    else [top, left, origin] = [r.bottom + gap, Math.min(r.left, vw - w - 8), 'top left'];
-    setStyle({ top: top / z, left: left / z, width, zoom: z, transformOrigin: origin });
+    else [top, left, origin] = [r.bottom + gap, Math.max(8, Math.min(r.left, vw - w - 8)), 'top left'];
+    setStyle({ top: top / z, left: left / z, width: w / z, zoom: z, transformOrigin: origin });
   };
 
   useLayoutEffect(() => {

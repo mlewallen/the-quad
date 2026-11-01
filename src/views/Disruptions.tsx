@@ -7,7 +7,8 @@ import { useStore } from '../store';
 import { useDesigners, useQuarterStart, useWorkspace, useWorkspaceDisruptions } from '../hooks';
 import type { Disruption, ID } from '../types';
 import { WEEKS_PER_QUARTER } from '../types';
-import { absWeekFromInput, dateInputValue, formatWeekRange } from '../lib/quarters';
+import { formatWeekRange } from '../lib/quarters';
+import { WeekPicker } from '../components/WeekPicker';
 import CurveEditor from '../components/CurveEditor';
 import { Avatar, EmptyState, Field, Slider, TextInput } from '../components/ui';
 
@@ -104,15 +105,7 @@ function DisruptionEditor({ d, onDone }: { d: Disruption; onDone: () => void }) 
           <TextInput className="input sm" value={d.label} onCommit={(v) => up({ label: v })} placeholder="Optional" />
         </Field>
         <Field label="Start week">
-          <input
-            className="input sm"
-            type="date"
-            value={dateInputValue(d.startAbsWeek)}
-            onChange={(e) => {
-              const w = absWeekFromInput(e.target.value);
-              if (w != null) up({ startAbsWeek: w });
-            }}
-          />
+          <WeekPicker size="sm" value={d.startAbsWeek} onChange={(w) => up({ startAbsWeek: w })} ariaLabel="Start week" />
         </Field>
         <Field label="Duration (weeks)">
           <input className="input sm" type="number" min={1} max={52} value={d.duration} onChange={(e) => up({ duration: Math.max(1, Number(e.target.value) || 1) })} />

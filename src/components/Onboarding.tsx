@@ -1,15 +1,27 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowLeft, ArrowRight, Plus, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Moon, Pipette, Plus, Sun, X } from 'lucide-react';
 import { ease, spring } from '../lib/motion';
 import { useStore } from '../store';
 import { navigate } from '../hooks';
-import type { Size, TeamType } from '../types';
+import type { Size, TeamType, ThemeMode } from '../types';
 import { SIZES } from '../types';
 import { DESIGNER_COLORS, defaultConfig, TEAM_TYPES } from '../lib/defaults';
 import { MONTHS } from '../lib/quarters';
 import { recommendedDuration, defaultAllocation } from '../lib/sizing';
 import { ListEditor } from './ui';
+
+/** "Favorite color" picks: each sets the accent and a light or dark theme to match its mood. */
+const FAVORITES: { name: string; vibe: string; accent: string; theme: Exclude<ThemeMode, 'system'> }[] = [
+  { name: 'Indigo', vibe: 'Calm and focused', accent: '#5b5bd6', theme: 'light' },
+  { name: 'Teal', vibe: 'Fresh and clear', accent: '#0d9488', theme: 'light' },
+  { name: 'Coral', vibe: 'Bold and warm', accent: '#e5484d', theme: 'light' },
+  { name: 'Marigold', vibe: 'Sunny and upbeat', accent: '#d97706', theme: 'light' },
+  { name: 'Sky', vibe: 'Bright and open', accent: '#0284c7', theme: 'light' },
+  { name: 'Bubblegum', vibe: 'Playful and loud', accent: '#db2777', theme: 'light' },
+  { name: 'Forest', vibe: 'Deep and grounded', accent: '#22a55b', theme: 'dark' },
+  { name: 'Nebula', vibe: 'Moody and creative', accent: '#9d5cf0', theme: 'dark' },
+];
 
 interface DesignerDraft { name: string; color: string }
 interface InitDraft { name: string; designerIndex: number | null; size: Size }
@@ -34,6 +46,28 @@ export default function Onboarding() {
     { name: '', color: DESIGNER_COLORS[1] },
   ]);
   const [inits, setInits] = useState<InitDraft[]>([{ name: '', designerIndex: null, size: 'M' }]);
+  // Favorite color previews live by writing straight to settings; skipping restores what was there.
+  const updateSettings = useStore((s) => s.updateSettings);
+  const [original] = useState(() => {
+    const { accent, theme } = useStore.getState().settings;
+    return { accent, theme };
+  });
+  const [favorite, setFavorite] = useState<string | null>(null);
+  const [customAccent, setCustomAccent] = useState<string | null>(null);
+  const pickFavorite = (f: (typeof FAVORITES)[number]) => {
+    setFavorite(f.name);
+    updateSettings({ accent: f.accent, theme: f.theme });
+  };
+  const pickCustom = (accent: string) => {
+    setFavorite('custom');
+    setCustomAccent(accent);
+    updateSettings({ accent, theme: original.theme });
+  };
+  const clearFavorite = () => {
+    setFavorite(null);
+    updateSettings(original);
+  };
+  const chosen = FAVORITES.find((f) => f.name === favorite);
 
   const pickTeam = (t: TeamType) => {
     setTeamType(t);
@@ -63,8 +97,9 @@ export default function Onboarding() {
     navigate({ view: 'gantt', project: null, page: false, settings: null }, true);
   };
 
-  const steps = ['Team', 'Designers', labels.initiatives, 'Review'];
-  const canNext = [!!name.trim(), validDesigners.length > 0, true, true][step];
+  const steps = ['Team', 'Color', 'Designers', labels.initiatives, 'Review'];
+  const last = steps.length - 1;
+  const canNext = [!!name.trim(), true, validDesigners.length > 0, true, true][step];
 
   return (
     <div className="onboard">
@@ -72,7 +107,7 @@ export default function Onboarding() {
         <div className="row" style={{ marginBottom: 18 }}>
           <div className="brand"><span className="brand-mark" aria-hidden><i /><i /><i /><i /></span>The Quad</div>
           <span className="spacer" />
-          <span className="tiny faint">Step {step + 1} of 4 · {steps[step]}</span>
+          <span className="tiny faint">Step {step + 1} of {steps.length} · {steps[step]}</span>
         </div>
         <div className="steps">
           {steps.map((s, i) => (
@@ -135,6 +170,41 @@ export default function Onboarding() {
         )}
 
         {step === 1 && (
+          <div className="col" style={{ gap: 14 }}>
+            <div>
+              <span className="chip" style={{ marginBottom: 8 }}>Optional</span>
+              <h1>Quick one: what’s your favorite color?</h1>
+              <p className="muted" style={{ marginTop: 4 }}>We’ll theme The Quad around it. You can change it anytime in Settings → Appearance.</p>
+            </div>
+            <div className="fav-grid" role="radiogroup" aria-label="Favorite color">
+              {FAVORITES.map((f) => (
+                <button
+                  key={f.name}
+                  role="radio"
+                  aria-checked={favorite === f.name}
+                  className={`choice fav ${favorite === f.name ? 'on' : ''}`}
+                  style={{ '--fav': f.accent } as React.CSSProperties}
+                  onClick={() => pickFavorite(f)}
+                >
+                  <span className="fav-swatch" aria-hidden>{favorite === f.name && <Check size={16} strokeWidth={3} />}</span>
+                  <b>{f.name}</b>
+                  <span className="tiny muted">{f.vibe}</span>
+                  <span className="fav-theme tiny faint">{f.theme === 'dark' ? <Moon size={11} /> : <Sun size={11} />}{f.theme === 'dark' ? 'Dark' : 'Light'}</span>
+                </button>
+              ))}
+            </div>
+            <div className="row" style={{ flexWrap: 'wrap' }}>
+              <label className={`btn ${favorite === 'custom' ? 'fav-custom-on' : ''}`} style={{ position: 'relative' }}>
+                {favorite === 'custom' ? <span className="dot" style={{ background: customAccent ?? undefined, width: 10, height: 10 }} /> : <Pipette size={14} />}
+                Something else…
+                <input type="color" className="fav-custom-input" value={customAccent ?? original.accent} onChange={(e) => pickCustom(e.target.value)} aria-label="Pick any color" />
+              </label>
+              {favorite && <button className="btn ghost" onClick={clearFavorite}>Keep the default</button>}
+            </div>
+          </div>
+        )}
+
+        {step === 2 && (
           <div className="col" style={{ gap: 12 }}>
             <h1>Who’s on the team?</h1>
             <p className="muted">Add each designer and pick a color — it’s how their work shows up everywhere.</p>
@@ -158,7 +228,7 @@ export default function Onboarding() {
           </div>
         )}
 
-        {step === 2 && (
+        {step === 3 && (
           <div className="col" style={{ gap: 12 }}>
             <h1>What’s on deck?</h1>
             <p className="muted">Add a few {labels.initiatives.toLowerCase()} to start. Size sets a sensible duration; you can fine-tune everything later. You can skip this.</p>
@@ -200,12 +270,18 @@ export default function Onboarding() {
           </div>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <div className="col" style={{ gap: 14 }}>
             <h1>Ready to plan</h1>
             <div className="card card-pad col" style={{ gap: 8 }}>
               <div className="row"><span className="muted" style={{ width: 140 }}>Workspace</span><b>{name}</b> <span className="chip">{TEAM_TYPES.find((t) => t.id === teamType)!.name}</span></div>
               <div className="row"><span className="muted" style={{ width: 140 }}>Fiscal year starts</span>{MONTHS[fiscalStartMonth]}</div>
+              <div className="row">
+                <span className="muted" style={{ width: 140 }}>Theme</span>
+                {favorite ? (
+                  <span className="chip"><span className="dot" style={{ background: 'var(--accent)', width: 8, height: 8 }} />{chosen ? `${chosen.name} · ${chosen.theme === 'dark' ? 'Dark' : 'Light'}` : 'Custom color'}</span>
+                ) : <span className="faint">Default</span>}
+              </div>
               <div className="row" style={{ alignItems: 'flex-start' }}>
                 <span className="muted" style={{ width: 140 }}>Designers</span>
                 <div className="row" style={{ flexWrap: 'wrap' }}>
@@ -230,8 +306,8 @@ export default function Onboarding() {
         <div className="row" style={{ marginTop: 28 }}>
           {step > 0 && <button className="btn ghost" onClick={() => setStep(step - 1)}><ArrowLeft size={15} /> Back</button>}
           <span className="spacer" />
-          {step < 3 ? (
-            <button className="btn primary" disabled={!canNext} onClick={() => setStep(step + 1)}>Continue <ArrowRight size={15} /></button>
+          {step < last ? (
+            <button className="btn primary" disabled={!canNext} onClick={() => setStep(step + 1)}>{step === 1 && !favorite ? 'Skip' : 'Continue'} <ArrowRight size={15} /></button>
           ) : (
             <button className="btn primary" onClick={finish}>Open planning view <ArrowRight size={15} /></button>
           )}

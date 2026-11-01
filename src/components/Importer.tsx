@@ -5,14 +5,14 @@ import {
 } from 'lucide-react';
 import { useStore, type NewInitiative, type ProjectUpdate } from '../store';
 import { closeImporter, toast, useFeedback } from '../feedback';
-import { useDesigners, useQuarterProjects, useQuarterStart, useWorkspace } from '../hooks';
+import { useDesigners, useIsMobile, useQuarterProjects, useQuarterStart, useWorkspace } from '../hooks';
 import type { ExternalSource } from '../types';
 import { sheetsCsvUrl } from '../lib/csv';
 import {
   CONNECTORS, FIELD_LABELS, parseInput, planImport, rowsToItems, SAMPLES, type ExternalItem, type ItemField, type ParsedInput,
 } from '../lib/ingest';
 import { formatWeekRange } from '../lib/quarters';
-import { ease } from '../lib/motion';
+import { ease, sheetIn } from '../lib/motion';
 import { Avatar, PriorityChip } from './ui';
 
 type Tab = 'paste' | 'upload' | 'sheets' | 'trackers';
@@ -24,6 +24,7 @@ const SOURCE_LABEL: Record<ExternalSource, string> = {
 /** Global modal host, opened by paste-anywhere, file drop, ⌘K or the top bar. */
 export function ImporterModal() {
   const req = useFeedback((s) => s.importer);
+  const sheet = useIsMobile();
   useEffect(() => {
     if (!req) return;
     const on = (e: KeyboardEvent) => e.key === 'Escape' && !document.querySelector('[role=alertdialog]') && closeImporter();
@@ -34,20 +35,24 @@ export function ImporterModal() {
     <AnimatePresence>
       {req && (
         <motion.div
-          className="overlay center"
+          className={`overlay center ${sheet ? 'sheet-overlay' : ''}`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: 0.12 } }}
           onMouseDown={(e) => e.target === e.currentTarget && closeImporter()}
         >
           <motion.div
-            className="modal importer-modal"
+            className={`modal importer-modal ${sheet ? 'sheet' : ''}`}
             role="dialog"
             aria-modal="true"
             aria-label="Add projects"
-            initial={{ opacity: 0, y: 12, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 360, damping: 34 } }}
-            exit={{ opacity: 0, y: 6, transition: { duration: 0.14 } }}
+            {...(sheet
+              ? { variants: sheetIn, initial: 'initial', animate: 'animate', exit: 'exit' }
+              : {
+                  initial: { opacity: 0, y: 12, scale: 0.98 },
+                  animate: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 360, damping: 34 } },
+                  exit: { opacity: 0, y: 6, transition: { duration: 0.14 } },
+                })}
           >
             <div className="importer-head">
               <span className="panel-icon"><Sparkles size={15} /></span>

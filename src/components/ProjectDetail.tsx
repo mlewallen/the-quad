@@ -11,6 +11,7 @@ import { PRIORITIES, SIZES, WEEKS_PER_QUARTER } from '../types';
 import { computeLoad, loadLevel } from '../lib/capacity';
 import { effortWeeks, weeklyAllocation } from '../lib/curves';
 import { formatAbsWeek, formatWeekRange } from '../lib/quarters';
+import { WeekPicker } from './WeekPicker';
 import { effortFor, phaseBreakdown, recommendedDurationForCurve } from '../lib/sizing';
 import CurveEditor from './CurveEditor';
 import { DesignerSelect, Field, Section, Slider, TextInput } from './ui';
@@ -67,14 +68,9 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
     navigate({ project: p.id, page: m === 'page' });
   };
 
-  const weekOptions = [];
-  for (let w = -WEEKS_PER_QUARTER; w < WEEKS_PER_QUARTER * 2; w++) {
-    weekOptions.push(
-      <option key={w} value={w}>
-        {w >= 0 && w < WEEKS_PER_QUARTER ? `Wk ${w + 1}` : w < 0 ? `Prev Q wk ${w + WEEKS_PER_QUARTER + 1}` : `Next Q wk ${w - WEEKS_PER_QUARTER + 1}`} · {formatAbsWeek(qStart + w)}
-      </option>,
-    );
-  }
+  /** Week label relative to the viewed quarter, e.g. "Wk 3 · Oct 26". */
+  const weekLabel = (w: number) =>
+    `${w >= 0 && w < WEEKS_PER_QUARTER ? `Wk ${w + 1}` : w < 0 ? `Prev Q wk ${w + WEEKS_PER_QUARTER + 1}` : `Next Q wk ${w - WEEKS_PER_QUARTER + 1}`} · ${formatAbsWeek(qStart + w)}`;
 
   const addMilestone = () => {
     const used = new Set(s.milestones.map((m) => m.type));
@@ -170,9 +166,14 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
           <Section title="Schedule & Effort">
             <div className="grid3">
               <Field label="Start week">
-                <select className="select" value={s.startWeek} onChange={(e) => us({ startWeek: Number(e.target.value) })}>
-                  {weekOptions}
-                </select>
+                <WeekPicker
+                  value={qStart + s.startWeek}
+                  label={weekLabel(s.startWeek)}
+                  min={qStart - WEEKS_PER_QUARTER}
+                  max={qStart + WEEKS_PER_QUARTER * 2 - 1}
+                  onChange={(w) => us({ startWeek: w - qStart })}
+                  ariaLabel="Start week"
+                />
               </Field>
               <Field label="Duration (weeks)">
                 <input className="input" type="number" min={1} max={52} value={s.duration} onChange={(e) => us({ duration: Number(e.target.value) || 1 })} />
@@ -213,11 +214,15 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
                       {!workspace.config.milestoneTypes.includes(m.type) && <option>{m.type}</option>}
                       {workspace.config.milestoneTypes.map((t) => <option key={t}>{t}</option>)}
                     </select>
-                    <select className="select sm" style={{ width: 'auto' }} value={m.offset} onChange={(e) => updMilestone(m.id, { offset: Number(e.target.value) })}>
-                      {Array.from({ length: s.duration }, (_, i) => (
-                        <option key={i} value={i}>Wk {s.startWeek + i + 1} · {formatAbsWeek(qStart + s.startWeek + i)}</option>
-                      ))}
-                    </select>
+                    <WeekPicker
+                      size="sm"
+                      value={qStart + s.startWeek + Math.floor(m.offset)}
+                      label={weekLabel(s.startWeek + Math.floor(m.offset))}
+                      min={qStart + s.startWeek}
+                      max={qStart + s.startWeek + s.duration - 1}
+                      onChange={(w) => updMilestone(m.id, { offset: w - qStart - s.startWeek })}
+                      ariaLabel="Milestone week"
+                    />
                     <span className="spacer" />
                     <button className="btn icon ghost sm" aria-label="Remove milestone" onClick={() => us({ milestones: s.milestones.filter((x) => x.id !== m.id) })}><X size={14} /></button>
                   </div>
