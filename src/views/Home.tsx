@@ -15,7 +15,6 @@ import { WEEKS_PER_QUARTER } from '../types';
 import { computeLoad, loadLevel, summarize, type Entry, type WeekLoad } from '../lib/capacity';
 import { formatAbsWeek, quarterLabel, utcToAbsWeek } from '../lib/quarters';
 import { ease, spring, staggerChild, staggerParent } from '../lib/motion';
-import InitiativeTable from '../components/InitiativeTable';
 import { Avatar, LoadChip } from '../components/ui';
 
 /* ---------- readiness model ---------- */
@@ -57,14 +56,8 @@ export default function Home() {
       <div className="home-grid">
         <NextSteps r={r} load={load} entries={entries} className="span-5" />
         <Heatmap load={load} fromAbs={fromAbs} className="span-7" />
-        <section className="card span-8 home-table">
-          <PanelHead icon={Layers} title="Projects" sub="Everything in this quarter for the active plan. Shift-click to bulk edit." aside={<span className="chip">{entries.length}</span>} />
-          <div className="card-pad" style={{ paddingTop: 4 }}><InitiativeTable entries={entries} /></div>
-        </section>
-        <div className="span-4 col" style={{ gap: 16 }}>
-          <Scenarios />
-          <UpcomingMilestones entries={entries} />
-        </div>
+        <Scenarios className="span-6" />
+        <UpcomingMilestones entries={entries} className="span-6" />
       </div>
     </div>
   );
@@ -90,6 +83,7 @@ function ReadinessHero({ r, load }: { r: Readiness; load: Record<string, WeekLoa
   const q = useStore((s) => s.currentQuarter);
   const qStart = useQuarterStart();
   const designers = useDesigners();
+  const labels = useWorkspace()!.config.labels;
   const nowWeek = utcToAbsWeek(Date.now()) - qStart;
   const status =
     !r.total ? { label: 'Empty plan', tone: '' }
@@ -151,7 +145,7 @@ function ReadinessHero({ r, load }: { r: Readiness; load: Record<string, WeekLoa
       </div>
 
       <motion.div className="hero-kpis" variants={staggerParent} initial="initial" animate="animate">
-        <Stat label="Projects" value={String(r.total)} />
+        <Stat label={labels.initiatives} value={String(r.total)} href="#/projects" linkLabel={`Open ${labels.initiatives}, ${r.total} this quarter`} />
         <Stat label="Team avg load" value={`${Math.round(avg)}%`} tone={loadLevel(avg)} />
         <Stat label="Free capacity" value={`${free.toFixed(0)} wks`} />
         <Stat label="Designers" value={String(r.designers)} />
@@ -181,11 +175,17 @@ function Ring({ value, tone }: { value: number; tone: string }) {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
+function Stat({ label, value, tone, href, linkLabel }: { label: string; value: string; tone?: string; href?: string; linkLabel?: string }) {
+  const body = (
+    <>
+      <span className="kpi-label">{label}{href && <ArrowRight size={11} aria-hidden />}</span>
+      <span className="kpi-value">{value}</span>
+    </>
+  );
+  if (href) return <motion.a href={href} className={`kpi kpi-link ${tone ?? ''}`} variants={staggerChild} aria-label={linkLabel}>{body}</motion.a>;
   return (
     <motion.div className={`kpi ${tone ?? ''}`} variants={staggerChild}>
-      <span className="kpi-label">{label}</span>
-      <span className="kpi-value">{value}</span>
+      {body}
     </motion.div>
   );
 }
@@ -254,7 +254,7 @@ function NextSteps({ r, load, entries, className }: { r: Readiness; load: Record
             }
           },
         },
-        { label: 'Review', run: () => navigate({ view: 'manage', designer: null }) },
+        { label: 'Review', run: () => navigate({ view: 'projects', designer: null }) },
       ],
     });
   }
@@ -390,7 +390,7 @@ function Heatmap({ load, fromAbs, className }: { load: Record<string, WeekLoad[]
 
 /* ---------- scenarios ---------- */
 
-function Scenarios() {
+function Scenarios({ className }: { className: string }) {
   const plans = useQuarterPlans();
   const active = useActivePlan();
   const projects = useQuarterProjects();
@@ -414,7 +414,7 @@ function Scenarios() {
   );
 
   return (
-    <section className="card">
+    <section className={`card ${className}`}>
       <PanelHead
         icon={Layers}
         title="Scenarios"
@@ -493,7 +493,7 @@ function Scenarios() {
 
 /* ---------- milestones ---------- */
 
-function UpcomingMilestones({ entries }: { entries: Entry[] }) {
+function UpcomingMilestones({ entries, className }: { entries: Entry[]; className: string }) {
   const qStart = useQuarterStart();
   const dmap = useDesignerMap();
   const now = utcToAbsWeek(Date.now());
@@ -503,7 +503,7 @@ function UpcomingMilestones({ entries }: { entries: Entry[] }) {
     .filter((x) => x.abs >= from && x.abs < from + 4)
     .sort((a, b) => a.abs - b.abs);
   return (
-    <section className="card">
+    <section className={`card ${className}`}>
       <PanelHead icon={Diamond} title="Upcoming milestones" sub={`Next 4 weeks from ${formatAbsWeek(from)}`} aside={<span className="chip">{items.length}</span>} />
       <div className="col" style={{ gap: 2, padding: '0 12px 12px', maxHeight: 300, overflow: 'auto' }}>
         {items.slice(0, 12).map(({ m, e, abs }) => {

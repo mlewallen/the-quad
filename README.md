@@ -40,7 +40,7 @@ To try the app with a realistic team, use **Settings → Data → Load demo team
 | `src/lib/curves.ts` | Flat / front / back / bell / custom allocation curves; custom curves resample when duration changes |
 | `src/lib/sizing.ts` | Size profiles (effort weeks by work type × S/M/L/XL) and the duration recommendation |
 | `src/lib/balancer.ts` | Greedy auto-balancer (even load, priority first, minimize conflicts) |
-| `src/views/*` | Home (readiness, next steps, capacity heatmap), Gantt, Allocation, Disruptions, Focus, Manage, Backlog, Designer |
+| `src/views/*` | Home (readiness, next steps, capacity heatmap), Gantt, Team (per-designer load, projects and allocation), Projects (the bulk-editable table), Disruptions, Backlog, Designer |
 | `src/components/*` | Context bar, project detail, curve editor, onboarding, settings, import |
 
 ## Planning rules worth knowing

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  CalendarOff, ChartGantt, Check, ClipboardPaste, Ellipsis, Layers, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, Focus, Gauge, Inbox, LayoutDashboard,
-  LogOut, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings, Sun, Table2, UserRound, type LucideIcon,
+  CalendarOff, ChartGantt, Check, ClipboardPaste, Ellipsis, Layers, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, Inbox, LayoutDashboard,
+  LogOut, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings, Sun, Table2, UserRound, Users, type LucideIcon,
 } from 'lucide-react';
 import { useStore } from '../store';
 import {
@@ -19,10 +19,9 @@ import { signOut, useAccount } from '../account';
 export const VIEW_ICONS: Record<NavView, LucideIcon> = {
   home: LayoutDashboard,
   gantt: ChartGantt,
-  allocation: Gauge,
+  team: Users,
+  projects: Table2,
   disruptions: CalendarOff,
-  focus: Focus,
-  manage: Table2,
   backlog: Inbox,
 };
 
@@ -38,7 +37,7 @@ function useNavCounts() {
   const overloaded = designers.filter((d) => summarize(load[d.id] ?? []).over > 0).length;
   const counts: Partial<Record<NavView, { n: number; tone?: 'danger' }>> = {
     backlog: backlog ? { n: backlog } : undefined,
-    allocation: overloaded ? { n: overloaded, tone: 'danger' } : undefined,
+    team: overloaded ? { n: overloaded, tone: 'danger' } : undefined,
   };
   return { counts, load, designers };
 }
@@ -360,7 +359,7 @@ function PlanSwitcher() {
    and a "More" sheet holding everything the sidebar has that the tabs don't.
    ------------------------------------------------------------------------- */
 
-const TABS: NavView[] = ['home', 'gantt', 'allocation', 'backlog'];
+const TABS: NavView[] = ['home', 'gantt', 'team', 'backlog'];
 
 export function MobileTopBar({ view, designerId }: { view: View; designerId: string | null }) {
   const setPalette = useFeedback((s) => s.setPaletteOpen);

@@ -18,14 +18,13 @@ import Celebration from './components/Celebration';
 import { Modal } from './components/ui';
 import Home from './views/Home';
 import Gantt from './views/Gantt';
-import Allocation from './views/Allocation';
+import Team from './views/Team';
 import Disruptions from './views/Disruptions';
-import Focus from './views/Focus';
-import Manage from './views/Manage';
+import Projects from './views/Projects';
 import Backlog from './views/Backlog';
 import DesignerView from './views/Designer';
 
-const VIEW_COMPONENTS = { home: Home, gantt: Gantt, allocation: Allocation, disruptions: Disruptions, focus: Focus, manage: Manage, backlog: Backlog, designer: DesignerView };
+const VIEW_COMPONENTS = { home: Home, gantt: Gantt, team: Team, projects: Projects, disruptions: Disruptions, backlog: Backlog, designer: DesignerView };
 
 function useTheme() {
   const { theme, accent, uiScale: scale } = useStore((s) => s.settings);
@@ -46,7 +45,7 @@ function useTheme() {
   }, [theme, accent, uiScale, systemDark]);
 }
 
-/** Global keys: ⌘/Ctrl-K palette, 1–7 views, [ sidebar. Ignored while typing. */
+/** Global keys: ⌘/Ctrl-K palette, 1–6 views, [ sidebar. Ignored while typing. */
 function useShortcuts(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;

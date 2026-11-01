@@ -500,7 +500,7 @@ table.data td.check, table.data th.check { width: 32px; padding-right: 0; }
    ========================================================================= */
 .home-v2 { display: flex; flex-direction: column; gap: 16px; }
 .home-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; align-items: start; }
-.span-4 { grid-column: span 4; } .span-5 { grid-column: span 5; } .span-7 { grid-column: span 7; } .span-8 { grid-column: span 8; }
+.span-4 { grid-column: span 4; } .span-5 { grid-column: span 5; } .span-6 { grid-column: span 6; } .span-7 { grid-column: span 7; } .span-8 { grid-column: span 8; }
 .panel-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px 12px; }
 .panel-icon { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); flex: none; }
 
@@ -563,7 +563,6 @@ table.data td.check, table.data th.check { width: 32px; padding-right: 0; }
 .hm-legend .hm-cell { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
 .hm-legend .hm-cell:hover { transform: none; box-shadow: none; }
 
-.home-table .table-wrap { max-height: 560px; }
 .scenario { padding: 12px; border-radius: var(--r-md); border: 1px solid var(--border); cursor: pointer; display: flex; flex-direction: column; gap: 8px; transition: border-color 0.15s, box-shadow 0.2s; background: var(--surface); }
 .scenario:hover { border-color: var(--border-strong); box-shadow: var(--shadow-1); }
 .scenario.active { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); }
@@ -579,7 +578,7 @@ table.data td.check, table.data th.check { width: 32px; padding-right: 0; }
 @container shell (max-width: 1060px) {
   .hero { grid-template-columns: 1fr 1fr; }
   .hero-kpis { grid-column: 1 / -1; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .span-4, .span-5, .span-7, .span-8 { grid-column: 1 / -1; }
+  .span-4, .span-5, .span-6, .span-7, .span-8 { grid-column: 1 / -1; }
 }
 
 .loadbar { height: 6px; background: var(--surface-3); border-radius: 3px; overflow: hidden; }
@@ -666,7 +665,7 @@ table.data td.check, table.data th.check { width: 32px; padding-right: 0; }
 .tooltip .t-row span:last-child { color: var(--text); font-weight: 500; text-align: right; }
 
 /* =========================================================================
-   Allocation / Focus / Disruptions cards
+   Team / Disruptions cards
    ========================================================================= */
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
 .spark { display: flex; align-items: flex-end; gap: 3px; height: 56px; position: relative; }
@@ -677,7 +676,9 @@ table.data td.check, table.data th.check { width: 32px; padding-right: 0; }
 .focus-item { display: flex; gap: 10px; padding: 10px 8px; margin: 0 -8px; border-radius: var(--r-sm); cursor: pointer; transition: background 0.15s; }
 .focus-item:hover { background: var(--hover); }
 .focus-item:hover .name { color: var(--accent); }
-.focus-item .swatch { width: 3px; border-radius: 2px; flex: none; }
+.alloc-item .swatch { width: 3px; height: 16px; border-radius: 2px; flex: none; }
+.team-project { font-weight: 500; color: var(--text); min-width: 0; transition: color 0.15s; }
+.team-project:hover { color: var(--accent); }
 .backlog-grid { align-items: start; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); }
 .list-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border); }
 
@@ -705,6 +706,9 @@ table.data td.check, table.data th.check { width: 32px; padding-right: 0; }
 .kpi.ok .kpi-value { color: var(--ok); }
 .kpi.warn .kpi-value { color: var(--warn); }
 .kpi.over .kpi-value { color: var(--over); }
+a.kpi-link { color: inherit; text-decoration: none; transition: border-color 0.15s, background 0.15s; }
+a.kpi-link:hover { border-color: var(--accent-line); background: var(--accent-softer); }
+a.kpi-link:hover .kpi-label { color: var(--accent); }
 .designer-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 16px; align-items: start; }
 
 .wchart { display: flex; flex-direction: column; gap: 6px; }
@@ -1126,7 +1130,6 @@ table.data td.check, table.data th.check { width: 32px; padding-right: 0; }
   .filters { display: grid; grid-template-columns: 1fr 1fr; }
   .filters .search { width: 100%; grid-column: 1 / -1; }
   .filters .select { width: 100%; min-width: 0; }
-  .home-table .table-wrap { max-height: none; }
   .cards { grid-template-columns: 1fr; gap: 12px; }
   .grid3, .backlog-grid { grid-template-columns: minmax(0, 1fr); }
   .fav-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
