@@ -8,7 +8,7 @@ import { recommendedDuration } from './sizing';
 /**
  * A realistic 10-designer workspace for demos and stress testing: ~44
  * projects, two plan scenarios, disruptions, milestones, pairs, a few
- * overloads and some unassigned work. Deterministic, so screenshots and
+ * overloads, some unassigned work and a ranked backlog of unscheduled ideas. Deterministic, so screenshots and
  * bug reports are reproducible.
  */
 
@@ -80,6 +80,15 @@ const AREAS: Record<string, { pm: string; em: string; projects: [string, Size, P
   },
 };
 
+/** Unscheduled ideas waiting in the backlog, already ranked. */
+const UNSCHEDULED: [string, Size, Priority, string, string][] = [
+  ['Notifications inbox', 'L', 'P1', 'Design', 'Platform'],
+  ['Dark mode', 'XL', 'P2', 'Design', 'Design system'],
+  ['Help center redesign', 'M', 'P2', 'Design', 'Onboarding'],
+  ['Localization readiness review', 'M', 'P2', 'Consult', 'Platform'],
+  ['Wishlist and saved items', 'L', 'P3', 'Design', 'Checkout'],
+];
+
 const GOALS = ['Grow paid conversion 15%', 'Halve time-to-value for new teams', 'Ship mobile parity', 'Raise accessibility to WCAG AA', 'Enterprise readiness'];
 const AREA_GOAL: Record<string, string> = {
   Checkout: GOALS[0], Growth: GOALS[0], Search: GOALS[1], Onboarding: GOALS[1], Mobile: GOALS[2], 'Design system': GOALS[3], Platform: GOALS[4],
@@ -135,12 +144,18 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
       // which keeps this quarter near (not far past) the team's capacity.
       const later = priority !== 'P0' && n++ % 5 >= 3;
       (later ? nextQuarter : projects).push({
-        id: makeId(), workspaceId: workspace.id, quarter: later ? quarter + 1 : quarter, name, ticket: `DSN-${ticket++}`, reference: '',
-        workType, size, priority, epic: size === 'XL', pm: info.pm, em: info.em, goal: AREA_GOAL[area], gaTarget: '',
+        id: makeId(), workspaceId: workspace.id, quarter: later ? quarter + 1 : quarter, backlogRank: null, name, ticket: `DSN-${ticket++}`, reference: '',
+        workType, size, priority, epic: size === 'XL', pm: info.pm, em: info.em, goal: AREA_GOAL[area], gaTargetWeek: null, gaTargetText: '',
         productArea: area, notes: '', createdAt: Date.now(),
       });
     }
   }
+
+  const unscheduled: Project[] = UNSCHEDULED.map(([name, size, priority, workType, area], i) => ({
+    id: makeId(), workspaceId: workspace.id, quarter: null, backlogRank: i, name, ticket: '', reference: '',
+    workType, size, priority, epic: false, pm: AREAS[area].pm, em: AREAS[area].em, goal: AREA_GOAL[area], gaTargetWeek: null, gaTargetText: '',
+    productArea: area, notes: '', createdAt: Date.now(),
+  }));
 
   // --- Plan A: greedy, priority-first placement ---------------------------
   const PRI = { P0: 0, P1: 1, P2: 2, P3: 3 };
@@ -177,7 +192,6 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
       weekly.forEach((v, i) => (load[best.designer][best.start + i] += v));
     }
     const assigned = !unassigned.has(p.id);
-    const progress = assigned ? Math.min(1, Math.max(0, (1 - best.start / WEEKS_PER_QUARTER) * rand() * 0.8)) : 0;
     const milestones: Milestone[] =
       p.workType === 'Design' && duration >= 4
         ? [
@@ -189,7 +203,8 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
     schedulesA[p.id] = {
       designerId: assigned ? best.designer : null,
       pairDesignerId: null,
-      phase: phases[Math.min(phases.length - 2, Math.floor(progress * (phases.length - 1)))],
+      // Phases follow the schedule; a few are pinned by hand below.
+      phaseOverride: null,
       startWeek: assigned ? best.start : 0,
       duration,
       allocation,
@@ -209,10 +224,27 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
     s.pairDesignerId = pair.id;
     weekly.forEach((v, i) => (load[pair.id][s.startWeek + i] += v));
   }
+  // Manual phase overrides: one P0 already in review ahead of schedule, one
+  // waiting on research that the schedule says should be done.
+  const scheduled = order.filter((p) => schedulesA[p.id].designerId && p.workType === 'Design');
+  const reviewEarly = scheduled.find((p) => p.priority === 'P0');
+  if (reviewEarly) schedulesA[reviewEarly.id].phaseOverride = phases.find((x) => /approv/i.test(x)) ?? null;
+  const stuck = scheduled.find((p) => p.priority === 'P1' && schedulesA[p.id].startWeek <= 2);
+  if (stuck) schedulesA[stuck.id].phaseOverride = phases[0];
   // One deliberately stretched designer, so the overload paths have something to show.
   const kai = d('Kai');
   const extra = projects.find((x) => schedulesA[x.id].designerId && schedulesA[x.id].designerId !== kai && x.priority === 'P2');
   if (extra) schedulesA[extra.id] = { ...schedulesA[extra.id], designerId: kai, startWeek: 2, confirmed: false };
+
+  // GA targets: most P0/P1 work launches a few weeks after design wraps; one is
+  // squeezed so design runs past GA, and one still has a free-text note.
+  const launches = projects.filter((p) => p.priority !== 'P2' && p.priority !== 'P3' && schedulesA[p.id].designerId);
+  launches.forEach((p, i) => {
+    const s = schedulesA[p.id];
+    p.gaTargetWeek = qStart + s.startWeek + s.duration - 1 + (i === 1 ? -2 : 2 + (i % 3));
+  });
+  const noted = projects.find((p) => p.priority === 'P2' && p.gaTargetWeek == null);
+  if (noted) noted.gaTargetText = 'After the pricing review';
 
   // --- Plan B: same work, a different staffing bet ------------------------
   const schedulesB: Record<string, Schedule> = structuredClone(schedulesA);
@@ -232,7 +264,7 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
   for (const p of nextQuarter) {
     const allocation = p.workType === 'Design' ? 40 : p.workType === 'Consult' ? 20 : 10;
     draft[p.id] = {
-      designerId: null, pairDesignerId: null, phase: phases[0], startWeek: 0, allocation,
+      designerId: null, pairDesignerId: null, phaseOverride: null, startWeek: 0, allocation,
       duration: recommendedDuration(p.workType, p.size, allocation), curve: { shape: 'flat' }, confirmed: false, milestones: [],
     };
   }
@@ -241,5 +273,5 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
     { id: makeId(), workspaceId: workspace.id, quarter, name: 'Plan B · Rebalanced', createdAt: now + 1, schedules: schedulesB },
     { id: makeId(), workspaceId: workspace.id, quarter: quarter + 1, name: 'Draft', createdAt: now + 2, schedules: draft },
   ];
-  return { workspace, projects: [...projects, ...nextQuarter], plans, disruptions };
+  return { workspace, projects: [...projects, ...nextQuarter, ...unscheduled], plans, disruptions };
 }

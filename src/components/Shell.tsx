@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  CalendarOff, ChartGantt, Check, ClipboardPaste, Ellipsis, Layers, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, Focus, Gauge, Inbox, LayoutDashboard,
-  LogOut, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings, Sun, Table2, UserRound, type LucideIcon,
+  CalendarOff, ChartGantt, Check, ClipboardPaste, Ellipsis, Layers, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, Inbox, LayoutDashboard,
+  LogOut, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings, Sun, Table2, UserRound, Users, type LucideIcon,
 } from 'lucide-react';
 import { useStore } from '../store';
 import {
@@ -19,10 +19,9 @@ import { signOut, useAccount } from '../account';
 export const VIEW_ICONS: Record<NavView, LucideIcon> = {
   home: LayoutDashboard,
   gantt: ChartGantt,
-  allocation: Gauge,
+  team: Users,
+  projects: Table2,
   disruptions: CalendarOff,
-  focus: Focus,
-  manage: Table2,
   backlog: Inbox,
 };
 
@@ -36,11 +35,16 @@ function useNavCounts() {
   const { load } = useLoad();
   const backlog = entries.filter((e) => !e.schedule.designerId).length;
   const overloaded = designers.filter((d) => summarize(load[d.id] ?? []).over > 0).length;
-  const counts: Partial<Record<NavView, { n: number; tone?: 'danger' }>> = {
-    backlog: backlog ? { n: backlog } : undefined,
-    allocation: overloaded ? { n: overloaded, tone: 'danger' } : undefined,
+  // `label` is the badge's text alternative: the dot and the bare number mean nothing on their own.
+  const counts: Partial<Record<NavView, { n: number; tone?: 'danger'; label: string }>> = {
+    backlog: backlog ? { n: backlog, label: `${backlog} unassigned` } : undefined,
+    team: overloaded ? { n: overloaded, tone: 'danger', label: `${overloaded} overloaded` } : undefined,
   };
   return { counts, load, designers };
+}
+
+function designerNavLabel(name: string, st: { avg: number; over: number }) {
+  return `${name}, ${Math.round(st.avg)}% average load${st.over ? `, ${st.over} week${st.over > 1 ? 's' : ''} over capacity` : ''}`;
 }
 
 function useThemeCycle() {
@@ -72,11 +76,23 @@ export function Sidebar({ view, designerId }: { view: View; designerId: string |
           const on = v.id === view;
           const c = counts[v.id];
           return (
-            <a key={v.id} href={`#/${v.id}`} className={`nav-item ${on ? 'on' : ''}`} title={collapsed ? `${v.label} (${i + 1})` : undefined} aria-current={on ? 'page' : undefined}>
+            <a
+              key={v.id}
+              href={`#/${v.id}`}
+              className={`nav-item ${on ? 'on' : ''}`}
+              title={collapsed ? `${v.label} (${i + 1})` : undefined}
+              aria-label={collapsed ? `${v.label}${c ? `, ${c.label}` : ''}` : undefined}
+              aria-current={on ? 'page' : undefined}
+            >
               {on && <motion.span layoutId="nav-active" className="nav-active" transition={spring.snappy} />}
-              <Icon size={17} strokeWidth={1.75} className="nav-icon" />
+              <Icon size={17} strokeWidth={1.75} className="nav-icon" aria-hidden />
               {!collapsed && <span className="nav-label">{v.label}</span>}
-              {c && <span className={`nav-count ${c.tone ?? ''} ${collapsed ? 'dot-only' : ''}`}>{collapsed ? '' : c.n}</span>}
+              {c && (
+                <span className={`nav-count ${c.tone ?? ''} ${collapsed ? 'dot-only' : ''}`}>
+                  {collapsed ? '' : <span aria-hidden>{c.n}</span>}
+                  <span className="sr-only">{collapsed ? '' : `, ${c.label}`}</span>
+                </span>
+              )}
               {!collapsed && !c && <kbd className="nav-kbd">{i + 1}</kbd>}
             </a>
           );
@@ -97,6 +113,7 @@ export function Sidebar({ view, designerId }: { view: View; designerId: string |
                   href={`#/designer/${d.id}`}
                   className={`nav-item ${on ? 'on' : ''}`}
                   title={collapsed ? `${d.name} · ${Math.round(st.avg)}% avg` : undefined}
+                  aria-label={designerNavLabel(d.name, st)}
                   aria-current={on ? 'page' : undefined}
                   onClick={(e) => {
                     e.preventDefault();
@@ -104,7 +121,7 @@ export function Sidebar({ view, designerId }: { view: View; designerId: string |
                   }}
                 >
                   {on && <motion.span layoutId="nav-active" className="nav-active" transition={spring.snappy} />}
-                  <span className="nav-avatar" style={{ background: d.color }}>{d.name[0]?.toUpperCase()}</span>
+                  <span className="nav-avatar" style={{ background: d.color }} aria-hidden>{d.name[0]?.toUpperCase()}</span>
                   {!collapsed && <span className="nav-label ellipsis">{d.name}</span>}
                   {!collapsed && <span className={`nav-load lvl-text-${loadLevelOf(st.avg)}`}>{Math.round(st.avg)}%</span>}
                   {collapsed && st.over > 0 && <span className="nav-count dot-only danger" />}
@@ -117,15 +134,15 @@ export function Sidebar({ view, designerId }: { view: View; designerId: string |
 
       <div className="sidebar-foot">
         <UserButton collapsed={collapsed} />
-        <button className="nav-item" onClick={cycle} title={`Theme: ${theme} (click for ${nextTheme})`}>
+        <button className="nav-item" onClick={cycle} title={`Theme: ${theme} (click for ${nextTheme})`} aria-label={`Theme: ${theme}. Switch to ${nextTheme}`}>
           <ThemeIcon size={17} strokeWidth={1.75} className="nav-icon" />
           {!collapsed && <span className="nav-label" style={{ textTransform: 'capitalize' }}>{theme} theme</span>}
         </button>
-        <button className="nav-item" onClick={() => navigate({ settings: 'appearance' })} title="Settings">
+        <button className="nav-item" onClick={() => navigate({ settings: 'appearance' })} title="Settings" aria-label="Settings">
           <Settings size={17} strokeWidth={1.75} className="nav-icon" />
           {!collapsed && <span className="nav-label">Settings</span>}
         </button>
-        <button className="nav-item" onClick={() => update({ sidebarCollapsed: !collapsed })} title={collapsed ? 'Expand sidebar ([)' : 'Collapse sidebar ([)'}>
+        <button className="nav-item" onClick={() => update({ sidebarCollapsed: !collapsed })} title={collapsed ? 'Expand sidebar ([)' : 'Collapse sidebar ([)'} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed}>
           {collapsed ? <PanelLeftOpen size={17} strokeWidth={1.75} className="nav-icon" /> : <PanelLeftClose size={17} strokeWidth={1.75} className="nav-icon" />}
           {!collapsed && <span className="nav-label">Collapse</span>}
           {!collapsed && <kbd className="nav-kbd">[</kbd>}
@@ -143,8 +160,8 @@ function UserButton({ collapsed }: { collapsed: boolean }) {
       side="right"
       width={240}
       trigger={({ toggle, open }) => (
-        <button className={`nav-item user-item ${open ? 'on' : ''}`} onClick={toggle} title={collapsed ? account.email : undefined} aria-haspopup="menu" aria-expanded={open}>
-          <span className="nav-avatar user-avatar">{account.name[0]?.toUpperCase()}</span>
+        <button className={`nav-item user-item ${open ? 'on' : ''}`} onClick={toggle} title={collapsed ? account.email : undefined} aria-label={collapsed ? `Account: ${account.name}, ${account.email}` : undefined} aria-haspopup="menu" aria-expanded={open}>
+          <span className="nav-avatar user-avatar" aria-hidden>{account.name[0]?.toUpperCase()}</span>
           {!collapsed && (
             <span className="col" style={{ gap: 0, minWidth: 0, flex: 1, textAlign: 'left' }}>
               <span className="ellipsis small" style={{ fontWeight: 600, color: 'var(--text)' }}>{account.name}</span>
@@ -360,7 +377,7 @@ function PlanSwitcher() {
    and a "More" sheet holding everything the sidebar has that the tabs don't.
    ------------------------------------------------------------------------- */
 
-const TABS: NavView[] = ['home', 'gantt', 'allocation', 'backlog'];
+const TABS: NavView[] = ['home', 'gantt', 'team', 'backlog'];
 
 export function MobileTopBar({ view, designerId }: { view: View; designerId: string | null }) {
   const setPalette = useFeedback((s) => s.setPaletteOpen);
@@ -419,7 +436,7 @@ export function TabBar({ view }: { view: View }) {
               {on && <motion.span layoutId="tab-active" className="tab-active" transition={spring.snappy} />}
               <span className="tab-icon">
                 <Icon size={21} strokeWidth={on ? 2 : 1.75} />
-                {c && <span className={`tab-badge ${c.tone ?? ''}`}>{c.n > 99 ? '99+' : c.n}</span>}
+                {c && <span className={`tab-badge ${c.tone ?? ''}`}><span aria-hidden>{c.n > 99 ? '99+' : c.n}</span><span className="sr-only">, {c.label}</span></span>}
               </span>
               <span className="tab-label">{v.label}</span>
             </a>
@@ -459,7 +476,7 @@ function MoreSheet({ view, onClose }: { view: View; onClose: () => void }) {
               <button key={v.id} className={`more-tile ${view === v.id ? 'on' : ''}`} onClick={go(() => navigate({ view: v.id, page: false, designer: null, project: null }))}>
                 <Icon size={20} strokeWidth={1.75} />
                 <span>{v.label}</span>
-                {c && <span className={`nav-count ${c.tone ?? ''}`}>{c.n}</span>}
+                {c && <span className={`nav-count ${c.tone ?? ''}`}><span aria-hidden>{c.n}</span><span className="sr-only">, {c.label}</span></span>}
               </button>
             );
           })}
@@ -473,8 +490,8 @@ function MoreSheet({ view, onClose }: { view: View; onClose: () => void }) {
                 const st = summarize(load[d.id] ?? []);
                 const on = view === 'designer' && route.designer === d.id;
                 return (
-                  <button key={d.id} className={`more-row ${on ? 'on' : ''}`} onClick={go(() => openDesigner(d.id))}>
-                    <span className="nav-avatar" style={{ background: d.color }}>{d.name[0]?.toUpperCase()}</span>
+                  <button key={d.id} className={`more-row ${on ? 'on' : ''}`} onClick={go(() => openDesigner(d.id))} aria-label={designerNavLabel(d.name, st)}>
+                    <span className="nav-avatar" style={{ background: d.color }} aria-hidden>{d.name[0]?.toUpperCase()}</span>
                     <span className="ellipsis" style={{ flex: 1, textAlign: 'left' }}>{d.name}</span>
                     {st.over > 0 && <span className="tiny" style={{ color: 'var(--over)' }}>{st.over} wk over</span>}
                     <span className={`nav-load lvl-text-${loadLevelOf(st.avg)}`}>{Math.round(st.avg)}%</span>

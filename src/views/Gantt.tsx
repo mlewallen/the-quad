@@ -5,7 +5,7 @@ import { readableOn, spring } from '../lib/motion';
 import { useBarDrag, type DragKind } from '../lib/useBarDrag';
 import { useStore } from '../store';
 import {
-  openProject, useDesignerMap, useDesigners, useEntries, useLoad, useQuarterStart, useWorkspace, useWorkspaceDisruptions,
+  openProject, useDesignerMap, useDesigners, useEntries, useLoad, usePhase, useQuarterStart, useWorkspace, useWorkspaceDisruptions,
 } from '../hooks';
 import type { Designer, Disruption, ID } from '../types';
 import { WEEKS_PER_QUARTER } from '../types';
@@ -13,7 +13,7 @@ import type { Entry, WeekLoad } from '../lib/capacity';
 import { loadLevel, summarize } from '../lib/capacity';
 import { weeklyAllocation } from '../lib/curves';
 import { formatAbsWeek, formatWeekRange, utcToAbsWeek } from '../lib/quarters';
-import { Avatar, EmptyState, HealthStrip, LoadChip, PriorityChip, Toolbar } from '../components/ui';
+import { Avatar, barLabel, EmptyState, HealthStrip, LoadChip, PriorityChip, Toolbar } from '../components/ui';
 
 interface Hover {
   x: number;
@@ -32,6 +32,7 @@ export default function Gantt() {
   const workspace = useWorkspace()!;
   const designers = useDesigners();
   const dmap = useDesignerMap();
+  const phaseOf = usePhase();
   const entries = useEntries();
   const disruptions = useWorkspaceDisruptions();
   const qStart = useQuarterStart();
@@ -197,7 +198,15 @@ export default function Gantt() {
                               role="button"
                               tabIndex={0}
                               onKeyDown={(ev) => onKeyDown(ev, e.project.id, s)}
-                              aria-label={`${e.project.name}, ${formatWeekRange(qStart + s.startWeek, s.duration)}`}
+                              aria-label={`${barLabel({
+                                name: e.project.name,
+                                designer: designer?.name,
+                                pair: s.pairDesignerId ? dmap[s.pairDesignerId]?.name : undefined,
+                                allocation: s.allocation,
+                                confirmed: s.confirmed,
+                                phase: phaseOf(e),
+                                range: formatWeekRange(qStart + s.startWeek, s.duration),
+                              })}. Enter opens it; arrow keys move it, Shift with arrows resizes.`}
                             >
                               <span className="handle l" onPointerDown={(ev) => onBarPointerDown(ev, e, 'l')} />
                               <CurveFill entry={e} />
@@ -369,6 +378,7 @@ function StackedArea({ weeks, entries, dmapColor }: { weeks: WeekLoad[]; entries
 
 function BarTooltip({ hover, qStart, designerName }: { hover: Hover; qStart: number; designerName?: string }) {
   const { project: p, schedule: s } = hover.entry;
+  const phase = usePhase()(hover.entry);
   const left = Math.min(hover.x + 14, window.innerWidth - 300);
   return (
     <motion.div
@@ -382,7 +392,7 @@ function BarTooltip({ hover, qStart, designerName }: { hover: Hover; qStart: num
       <div className="t-row"><span>Designer</span><span>{designerName ?? 'Unassigned'}</span></div>
       <div className="t-row"><span>When</span><span>{formatWeekRange(qStart + s.startWeek, s.duration)}</span></div>
       <div className="t-row"><span>Allocation</span><span>{s.allocation}% · {s.curve.shape}</span></div>
-      <div className="t-row"><span>Phase</span><span>{s.phase}</span></div>
+      <div className="t-row"><span>Phase</span><span>{phase}</span></div>
       <div className="t-row"><span>Priority / size</span><span><PriorityChip p={p.priority} /> {p.size} {p.workType}</span></div>
       {s.milestones.length > 0 && <div className="t-row"><span>Milestones</span><span>{s.milestones.map((m) => m.type).join(', ')}</span></div>}
       <div className="t-row"><span>Status</span><span>{s.confirmed ? <span className="chip ok">Confirmed</span> : <span className="chip">Tentative</span>}</span></div>

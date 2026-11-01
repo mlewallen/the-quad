@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   AlertTriangle, ArrowRight, CalendarClock, Check, CircleCheck, Copy, Diamond, Gauge, Inbox, Layers, Pencil, Plus, Sparkles, Trash2,
@@ -14,8 +14,8 @@ import type { Designer, Plan } from '../types';
 import { WEEKS_PER_QUARTER } from '../types';
 import { computeLoad, loadLevel, summarize, type Entry, type WeekLoad } from '../lib/capacity';
 import { formatAbsWeek, quarterLabel, utcToAbsWeek } from '../lib/quarters';
+import { gaSlipWeeks } from '../lib/sizing';
 import { ease, spring, staggerChild, staggerParent } from '../lib/motion';
-import InitiativeTable from '../components/InitiativeTable';
 import { Avatar, LoadChip } from '../components/ui';
 
 /* ---------- readiness model ---------- */
@@ -57,14 +57,8 @@ export default function Home() {
       <div className="home-grid">
         <NextSteps r={r} load={load} entries={entries} className="span-5" />
         <Heatmap load={load} fromAbs={fromAbs} className="span-7" />
-        <section className="card span-8 home-table">
-          <PanelHead icon={Layers} title="Projects" sub="Everything in this quarter for the active plan. Shift-click to bulk edit." aside={<span className="chip">{entries.length}</span>} />
-          <div className="card-pad" style={{ paddingTop: 4 }}><InitiativeTable entries={entries} /></div>
-        </section>
-        <div className="span-4 col" style={{ gap: 16 }}>
-          <Scenarios />
-          <UpcomingMilestones entries={entries} />
-        </div>
+        <Scenarios className="span-6" />
+        <UpcomingMilestones entries={entries} className="span-6" />
       </div>
     </div>
   );
@@ -90,6 +84,7 @@ function ReadinessHero({ r, load }: { r: Readiness; load: Record<string, WeekLoa
   const q = useStore((s) => s.currentQuarter);
   const qStart = useQuarterStart();
   const designers = useDesigners();
+  const labels = useWorkspace()!.config.labels;
   const nowWeek = utcToAbsWeek(Date.now()) - qStart;
   const status =
     !r.total ? { label: 'Empty plan', tone: '' }
@@ -121,7 +116,7 @@ function ReadinessHero({ r, load }: { r: Readiness; load: Record<string, WeekLoa
         <div className="col" style={{ gap: 6, minWidth: 0 }}>
           <span className="hero-eyebrow">{quarterLabel(q)} plan readiness</span>
           <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-            <h1 className="ellipsis">{plan?.name ?? 'No plan'}</h1>
+            <h2 className="ellipsis hero-title">{plan?.name ?? 'No plan'}</h2>
             <span className={`chip ${status.tone}`}>{status.label}</span>
           </div>
           <div className="quarter-progress">
@@ -151,7 +146,7 @@ function ReadinessHero({ r, load }: { r: Readiness; load: Record<string, WeekLoa
       </div>
 
       <motion.div className="hero-kpis" variants={staggerParent} initial="initial" animate="animate">
-        <Stat label="Projects" value={String(r.total)} />
+        <Stat label={labels.initiatives} value={String(r.total)} href="#/projects" linkLabel={`Open ${labels.initiatives}, ${r.total} this quarter`} />
         <Stat label="Team avg load" value={`${Math.round(avg)}%`} tone={loadLevel(avg)} />
         <Stat label="Free capacity" value={`${free.toFixed(0)} wks`} />
         <Stat label="Designers" value={String(r.designers)} />
@@ -191,11 +186,17 @@ function Ring({ value, tone }: { value: number; tone: string }) {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
+function Stat({ label, value, tone, href, linkLabel }: { label: string; value: string; tone?: string; href?: string; linkLabel?: string }) {
+  const body = (
+    <>
+      <span className="kpi-label">{label}{href && <ArrowRight size={11} aria-hidden />}</span>
+      <span className="kpi-value">{value}</span>
+    </>
+  );
+  if (href) return <motion.a href={href} className={`kpi kpi-link ${tone ?? ''}`} variants={staggerChild} aria-label={linkLabel}>{body}</motion.a>;
   return (
     <motion.div className={`kpi ${tone ?? ''}`} variants={staggerChild}>
-      <span className="kpi-label">{label}</span>
-      <span className="kpi-value">{value}</span>
+      {body}
     </motion.div>
   );
 }
@@ -264,8 +265,18 @@ function NextSteps({ r, load, entries, className }: { r: Readiness; load: Record
             }
           },
         },
-        { label: 'Review', run: () => navigate({ view: 'manage', designer: null }) },
+        { label: 'Review', run: () => navigate({ view: 'projects', designer: null }) },
       ],
+    });
+  }
+  const sm = useStore((s) => s.settings.fiscalStartMonth);
+  const late = entries.filter((e) => (gaSlipWeeks(e.project, e.schedule, sm) ?? 0) > 0);
+  if (late.length) {
+    steps.push({
+      id: 'late', tone: 'warn', icon: CalendarClock,
+      title: <>{late.length} {(late.length === 1 ? labels.initiative : labels.initiatives).toLowerCase()} {late.length === 1 ? 'ends' : 'end'} after {labels.gaTarget}</>,
+      sub: late.slice(0, 3).map((e) => e.project.name).join(', ') + (late.length > 3 ? '…' : ''),
+      actions: [{ label: 'Review', primary: true, run: () => openProject(late[0].project.id) }],
     });
   }
   const noMilestones = entries.filter((e) => e.schedule.designerId && e.project.workType === 'Design' && e.schedule.duration >= 4 && !e.schedule.milestones.length);
@@ -331,6 +342,8 @@ function NextSteps({ r, load, entries, className }: { r: Readiness; load: Record
 
 /* ---------- capacity heatmap ---------- */
 
+const LEVEL_WORDS = { idle: 'free', ok: 'healthy', warn: 'full', over: 'over capacity' } as const;
+
 function Heatmap({ load, fromAbs, className }: { load: Record<string, WeekLoad[]>; fromAbs: number; className: string }) {
   const designers = useDesigners();
   const [sort, setSort] = useState<'name' | 'load'>('load');
@@ -340,12 +353,41 @@ function Heatmap({ load, fromAbs, className }: { load: Record<string, WeekLoad[]
     return sort === 'load' ? r.sort((a, b) => b.s.avg - a.s.avg) : r.sort((a, b) => a.d.name.localeCompare(b.d.name));
   }, [designers, load, sort]);
 
+  // ARIA grid with one tab stop: arrow keys move between cells, Enter opens the designer.
+  // Column 0 is the name button, 1..13 are the weeks.
+  const [active, setActive] = useState({ r: 0, c: 1 });
+  const gridRef = useRef<HTMLDivElement>(null);
+  const r0 = Math.min(active.r, Math.max(0, rows.length - 1));
+  const onGridKey = (e: React.KeyboardEvent) => {
+    const max = { r: rows.length - 1, c: WEEKS_PER_QUARTER };
+    const next = { r: r0, c: active.c };
+    if (e.key === 'ArrowRight') next.c = Math.min(max.c, next.c + 1);
+    else if (e.key === 'ArrowLeft') next.c = Math.max(0, next.c - 1);
+    else if (e.key === 'ArrowDown') next.r = Math.min(max.r, next.r + 1);
+    else if (e.key === 'ArrowUp') next.r = Math.max(0, next.r - 1);
+    else if (e.key === 'Home') {
+      next.c = 0;
+      if (e.ctrlKey) next.r = 0;
+    } else if (e.key === 'End') {
+      next.c = max.c;
+      if (e.ctrlKey) next.r = max.r;
+    } else if ((e.key === 'Enter' || e.key === ' ') && active.c > 0) {
+      e.preventDefault();
+      openDesigner(rows[r0].d.id);
+      return;
+    } else return;
+    e.preventDefault();
+    setActive(next);
+    gridRef.current?.querySelector<HTMLElement>(`[data-cell="${next.r}:${next.c}"]`)?.focus();
+  };
+  const tab = (r: number, c: number) => (r === r0 && c === active.c ? 0 : -1);
+
   return (
     <section className={`card ${className}`}>
       <PanelHead
         icon={Gauge}
         title="Team capacity"
-        sub="Each cell is one week. Hover for details, click a name for their view."
+        sub="Each cell is one week. Hover or focus a cell for its load; open a name for their view."
         aside={
           <div className="segmented" role="radiogroup" aria-label="Sort">
             <button role="radio" aria-checked={sort === 'load'} className={sort === 'load' ? 'on' : ''} onClick={() => setSort('load')}>Busiest</button>
@@ -354,44 +396,56 @@ function Heatmap({ load, fromAbs, className }: { load: Record<string, WeekLoad[]
         }
       />
       <div className="heatmap" style={{ '--weeks': WEEKS_PER_QUARTER } as React.CSSProperties}>
-        <div className="hm-row hm-head">
-          <span />
-          {Array.from({ length: WEEKS_PER_QUARTER }, (_, i) => (
-            <span key={i} className={i === nowIdx ? 'now' : ''} title={formatAbsWeek(fromAbs + i, true)}>{i + 1}</span>
-          ))}
-          <span>Avg</span>
+        <div ref={gridRef} role="grid" aria-label="Team capacity by week" aria-describedby="hm-legend" onKeyDown={onGridKey}>
+          <div className="hm-row hm-head" role="row">
+            <span role="columnheader"><span className="sr-only">Designer</span></span>
+            {Array.from({ length: WEEKS_PER_QUARTER }, (_, i) => (
+              <span key={i} role="columnheader" className={i === nowIdx ? 'now' : ''} title={formatAbsWeek(fromAbs + i, true)} aria-label={`Week ${i + 1}, ${formatAbsWeek(fromAbs + i, true)}${i === nowIdx ? ', this week' : ''}`}>{i + 1}</span>
+            ))}
+            <span role="columnheader">Avg</span>
+          </div>
+          <motion.div role="rowgroup" variants={staggerParent} initial="initial" animate="animate">
+            {rows.map(({ d, weeks, s }, r) => (
+              <motion.div key={d.id} className="hm-row" role="row" variants={staggerChild} layout transition={spring.smooth}>
+                <span role="rowheader" className="hm-name-cell">
+                  <button className="hm-name" tabIndex={tab(r, 0)} data-cell={`${r}:0`} onFocus={() => setActive({ r, c: 0 })} onClick={() => openDesigner(d.id)}>
+                    <Avatar designer={d} />
+                    <span className="ellipsis">{d.name}</span>
+                  </button>
+                </span>
+                {weeks.map((w, i) => {
+                  const lvl = loadLevel(w.total);
+                  // Intensity scales with load so busy weeks read darker within a level; over is always full strength.
+                  const strength = lvl === 'idle' ? 0 : lvl === 'over' ? 100 : Math.round(30 + Math.min(1, w.total / 120) * 70);
+                  const pct = Math.round(w.total);
+                  return (
+                    <span
+                      key={i}
+                      role="gridcell"
+                      tabIndex={tab(r, i + 1)}
+                      data-cell={`${r}:${i + 1}`}
+                      onFocus={() => setActive({ r, c: i + 1 })}
+                      onClick={() => openDesigner(d.id)}
+                      className={`hm-cell lvl-${lvl} ${i === nowIdx ? 'now' : ''}`}
+                      style={{ '--k': `${strength}%` } as React.CSSProperties}
+                      title={`${d.name} · W${i + 1} (${formatAbsWeek(w.absWeek)}): ${pct}%${w.disruptions ? ` incl. ${Math.round(w.disruptions)}% disruptions` : ''}`}
+                      aria-label={`W${i + 1}, ${pct}%, ${LEVEL_WORDS[lvl]}${w.disruptions ? `, including ${Math.round(w.disruptions)}% disruptions` : ''}`}
+                    >
+                      <span className="hm-val" aria-hidden>{pct}</span>
+                    </span>
+                  );
+                })}
+                <span role="gridcell" aria-label={`Average ${Math.round(s.avg)}%`}><LoadChip pct={s.avg} /></span>
+              </motion.div>
+            ))}
+          </motion.div>
         </div>
-        <motion.div variants={staggerParent} initial="initial" animate="animate">
-          {rows.map(({ d, weeks, s }) => (
-            <motion.div key={d.id} className="hm-row" variants={staggerChild} layout transition={spring.smooth}>
-              <button className="hm-name" onClick={() => openDesigner(d.id)}>
-                <Avatar designer={d} />
-                <span className="ellipsis">{d.name}</span>
-              </button>
-              {weeks.map((w, i) => {
-                const lvl = loadLevel(w.total);
-                // Intensity scales with load so busy weeks read darker within a level.
-                const strength = lvl === 'idle' ? 0 : Math.round(30 + Math.min(1, w.total / 120) * 70);
-                return (
-                  <span
-                    key={i}
-                    className={`hm-cell lvl-${lvl} ${i === nowIdx ? 'now' : ''}`}
-                    style={{ '--k': `${strength}%` } as React.CSSProperties}
-                    title={`${d.name} · W${i + 1} (${formatAbsWeek(w.absWeek)}): ${Math.round(w.total)}%${w.disruptions ? ` incl. ${Math.round(w.disruptions)}% disruptions` : ''}`}
-                  >
-                    {w.total > 100.5 ? Math.round(w.total) : ''}
-                  </span>
-                );
-              })}
-              <LoadChip pct={s.avg} />
-            </motion.div>
-          ))}
-        </motion.div>
-        <div className="hm-legend">
-          <span><i className="hm-cell lvl-idle" /> Free</span>
-          <span><i className="hm-cell lvl-ok" style={{ '--k': '70%' } as React.CSSProperties} /> ≤85%</span>
-          <span><i className="hm-cell lvl-warn" style={{ '--k': '80%' } as React.CSSProperties} /> ≤100%</span>
-          <span><i className="hm-cell lvl-over" style={{ '--k': '90%' } as React.CSSProperties} /> Over (value shown)</span>
+        <div className="hm-legend" id="hm-legend">
+          <span><i className="hm-cell lvl-idle" aria-hidden /> Free</span>
+          <span><i className="hm-cell lvl-ok" style={{ '--k': '70%' } as React.CSSProperties} aria-hidden /> Healthy, up to 85%</span>
+          <span><i className="hm-cell lvl-warn" style={{ '--k': '80%' } as React.CSSProperties} aria-hidden /> Full, up to 100%</span>
+          <span><i className="hm-cell lvl-over" aria-hidden /> Over 100% (striped, value shown)</span>
+          <span className="hm-legend-note">Up to 85% counts as healthy because it leaves room for crits, reviews and unplanned asks. Use the arrow keys to move between weeks.</span>
         </div>
       </div>
     </section>
@@ -400,7 +454,7 @@ function Heatmap({ load, fromAbs, className }: { load: Record<string, WeekLoad[]
 
 /* ---------- scenarios ---------- */
 
-function Scenarios() {
+function Scenarios({ className }: { className: string }) {
   const plans = useQuarterPlans();
   const active = useActivePlan();
   const projects = useQuarterProjects();
@@ -424,7 +478,7 @@ function Scenarios() {
   );
 
   return (
-    <section className="card">
+    <section className={`card ${className}`}>
       <PanelHead
         icon={Layers}
         title="Scenarios"
@@ -503,7 +557,7 @@ function Scenarios() {
 
 /* ---------- milestones ---------- */
 
-function UpcomingMilestones({ entries }: { entries: Entry[] }) {
+function UpcomingMilestones({ entries, className }: { entries: Entry[]; className: string }) {
   const qStart = useQuarterStart();
   const dmap = useDesignerMap();
   const now = utcToAbsWeek(Date.now());
@@ -513,7 +567,7 @@ function UpcomingMilestones({ entries }: { entries: Entry[] }) {
     .filter((x) => x.abs >= from && x.abs < from + 4)
     .sort((a, b) => a.abs - b.abs);
   return (
-    <section className="card">
+    <section className={`card ${className}`}>
       <PanelHead icon={Diamond} title="Upcoming milestones" sub={`Next 4 weeks from ${formatAbsWeek(from)}`} aside={<span className="chip">{items.length}</span>} />
       <div className="col" style={{ gap: 2, padding: '0 12px 12px', maxHeight: 300, overflow: 'auto' }}>
         {items.slice(0, 12).map(({ m, e, abs }) => {

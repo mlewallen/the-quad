@@ -4,7 +4,7 @@ import {
   AlertTriangle, ArrowLeft, ArrowRight, CircleCheck, ClipboardPaste, FileUp, Link2, Plug, RefreshCw, Sheet, Sparkles, X,
 } from 'lucide-react';
 import { useStore, type NewInitiative, type ProjectUpdate } from '../store';
-import { closeImporter, toast, useFeedback } from '../feedback';
+import { closeImporter, toast, useFeedback, type ImporterRequest } from '../feedback';
 import { useDesigners, useIsMobile, useQuarterProjects, useQuarterStart, useWorkspace } from '../hooks';
 import type { ExternalSource } from '../types';
 import { sheetsCsvUrl } from '../lib/csv';
@@ -13,7 +13,7 @@ import {
 } from '../lib/ingest';
 import { formatWeekRange } from '../lib/quarters';
 import { ease, sheetIn } from '../lib/motion';
-import { Avatar, PriorityChip } from './ui';
+import { Avatar, PriorityChip, useFocusTrap } from './ui';
 
 type Tab = 'paste' | 'upload' | 'sheets' | 'trackers';
 
@@ -41,32 +41,40 @@ export function ImporterModal() {
           exit={{ opacity: 0, transition: { duration: 0.12 } }}
           onMouseDown={(e) => e.target === e.currentTarget && closeImporter()}
         >
-          <motion.div
-            className={`modal importer-modal ${sheet ? 'sheet' : ''}`}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Add projects"
-            {...(sheet
-              ? { variants: sheetIn, initial: 'initial', animate: 'animate', exit: 'exit' }
-              : {
-                  initial: { opacity: 0, y: 12, scale: 0.98 },
-                  animate: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 360, damping: 34 } },
-                  exit: { opacity: 0, y: 6, transition: { duration: 0.14 } },
-                })}
-          >
-            <div className="importer-head">
-              <span className="panel-icon"><Sparkles size={15} /></span>
-              <div className="col" style={{ gap: 0, flex: 1 }}>
-                <h2>Add projects</h2>
-                <span className="tiny faint">Paste, drop a file, or bring in an export from your tracker.</span>
-              </div>
-              <button className="btn icon ghost" aria-label="Close" onClick={closeImporter}><X size={16} /></button>
-            </div>
-            <ImportFlow key={`${req.text ?? ''}${req.filename ?? ''}${req.tab ?? ''}`} initialText={req.text} initialFilename={req.filename} initialTab={req.tab} onDone={closeImporter} />
-          </motion.div>
+          <ImporterDialog req={req} sheet={sheet} />
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+function ImporterDialog({ req, sheet }: { req: ImporterRequest; sheet: boolean }) {
+  const ref = useFocusTrap<HTMLDivElement>();
+  return (
+    <motion.div
+      ref={ref}
+      className={`modal importer-modal ${sheet ? 'sheet' : ''}`}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="importer-title"
+      {...(sheet
+        ? { variants: sheetIn, initial: 'initial', animate: 'animate', exit: 'exit' }
+        : {
+            initial: { opacity: 0, y: 12, scale: 0.98 },
+            animate: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 360, damping: 34 } },
+            exit: { opacity: 0, y: 6, transition: { duration: 0.14 } },
+          })}
+    >
+      <div className="importer-head">
+        <span className="panel-icon"><Sparkles size={15} /></span>
+        <div className="col" style={{ gap: 0, flex: 1 }}>
+          <h2 id="importer-title">Add projects</h2>
+          <span className="tiny faint">Paste, drop a file, or bring in an export from your tracker.</span>
+        </div>
+        <button className="btn icon ghost" aria-label="Close" onClick={closeImporter}><X size={16} /></button>
+      </div>
+      <ImportFlow key={`${req.text ?? ''}${req.filename ?? ''}${req.tab ?? ''}`} initialText={req.text} initialFilename={req.filename} initialTab={req.tab} onDone={closeImporter} />
+    </motion.div>
   );
 }
 
@@ -386,7 +394,7 @@ function ReviewStep({ items, source, onBack, onDone }: { items: ExternalItem[]; 
                   </td>
                   <td>{r.project.priority ? <PriorityChip p={r.project.priority} /> : <span className="faint">–</span>}</td>
                   <td className="small">{r.project.size ?? <span className="faint">–</span>}</td>
-                  <td className="small">{r.schedule.phase ?? <span className="faint">–</span>}</td>
+                  <td className="small">{r.schedule.phaseOverride ?? <span className="faint">Auto</span>}</td>
                   <td className="small faint nowrap">
                     {r.schedule.startWeek !== undefined || r.schedule.duration ? formatWeekRange(qStart + (r.schedule.startWeek ?? 0), r.schedule.duration ?? 4) : '–'}
                   </td>

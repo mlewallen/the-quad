@@ -4,7 +4,7 @@ import {
   AlertTriangle, ArrowLeft, CalendarOff, Check, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, Diamond, Gauge, Layers, Lightbulb, Palette, Sparkles, Timer, UserX, Users,
 } from 'lucide-react';
 import {
-  navigate, openDesigner, openProject, useDesignerMap, useDesigners, useEntries, useLoad, useQuarterStart, useRoute, useWorkspace,
+  navigate, openDesigner, openProject, useDesignerMap, useDesigners, useEntries, useLoad, usePhase, useQuarterStart, useRoute, useWorkspace,
   useWorkspaceDisruptions,
 } from '../hooks';
 import type { Designer, ID } from '../types';
@@ -15,7 +15,7 @@ import { formatAbsWeek, formatWeekRange, utcToAbsWeek } from '../lib/quarters';
 import { useBarDrag } from '../lib/useBarDrag';
 import { useStore } from '../store';
 import { ease, readableOn, staggerChild, staggerParent } from '../lib/motion';
-import { Avatar, EmptyState, LoadChip, PriorityChip, TextInput } from '../components/ui';
+import { Avatar, barLabel, EmptyState, LoadChip, PriorityChip, TextInput } from '../components/ui';
 import { MenuItem, MenuLabel, Popover } from '../components/Popover';
 
 /**
@@ -118,6 +118,7 @@ export default function DesignerView() {
 
 function DesignerBody({ designer }: { designer: Designer }) {
   const workspace = useWorkspace()!;
+  const phaseOf = usePhase();
   const designers = useDesigners();
   const dmap = useDesignerMap();
   const entries = useEntries();
@@ -182,9 +183,9 @@ function DesignerBody({ designer }: { designer: Designer }) {
             <span className="hero-avatar-edit" aria-hidden><Palette size={11} /></span>
           </label>
           <div className="col" style={{ gap: 4, flex: 1, minWidth: 0 }}>
-            <h1>
+            <h2 className="hero-name-heading">
               <TextInput className="hero-name" value={designer.name} ariaLabel="Designer name" onCommit={(v) => v.trim() && updateDesigner(designer.id, { name: v.trim() })} />
-            </h1>
+            </h2>
             <div className="row small faint" style={{ flexWrap: 'wrap' }}>
               <span>{workspace.name}</span>·
               <span>{primary} owned · {mine.length - primary} pairing</span>·
@@ -245,11 +246,11 @@ function DesignerBody({ designer }: { designer: Designer }) {
                         <td>
                           <div className="row" style={{ gap: 8 }}>
                             <span className="swatch-sq" style={{ background: colorOf.get(e.project.id) }} />
-                            <span className="ellipsis" style={{ fontWeight: 500, maxWidth: 220 }}>{e.project.name}</span>
+                            <button type="button" className="link-btn row-open ellipsis" style={{ maxWidth: 220 }} onClick={(ev) => { ev.stopPropagation(); openProject(e.project.id); }}>{e.project.name}</button>
                             {partner && <span className="chip" title={pairing ? `Pairing with ${partner.name}` : `Paired with ${partner.name}`}><Users size={11} /> {partner.name.split(' ')[0]}</span>}
                           </div>
                         </td>
-                        <td className="small">{e.schedule.phase}</td>
+                        <td className="small">{phaseOf(e)}</td>
                         <td><PriorityChip p={e.project.priority} /></td>
                         <td className="small faint nowrap">{formatWeekRange(qStart + e.schedule.startWeek, e.schedule.duration)}</td>
                         <td className="small">{pairing ? `${Math.round(e.schedule.allocation * PAIR_SHARE)}%` : `${e.schedule.allocation}%`}</td>
@@ -281,7 +282,7 @@ function DesignerBody({ designer }: { designer: Designer }) {
 
           <motion.section className="card card-pad col" style={{ gap: 12 }} variants={staggerChild}>
             <h2>Effort mix</h2>
-            <MixBars title="By phase" rows={groupEffort((e) => e.schedule.phase)} color={designer.color} />
+            <MixBars title="By phase" rows={groupEffort(phaseOf)} color={designer.color} />
             <MixBars title="By work type" rows={groupEffort((e) => e.project.workType)} color={designer.color} />
             <MixBars title="By priority" rows={groupEffort((e) => e.project.priority).sort((a, b) => a[0].localeCompare(b[0]))} color={designer.color} />
           </motion.section>
@@ -427,6 +428,7 @@ function MiniTimeline({
   const AFTER = 2;
   const n = WEEKS_PER_QUARTER + AFTER;
   const updateSchedule = useStore((st) => st.updateSchedule);
+  const phaseOf = usePhase();
   const nowIdx = utcToAbsWeek(Date.now()) - qStart;
   const { drag, effective, onPointerDown, onKeyDown } = useBarDrag({
     weeks: n,
@@ -465,7 +467,15 @@ function MiniTimeline({
                 <motion.div
                   role="button"
                   tabIndex={0}
-                  aria-label={`${e.project.name}, ${formatWeekRange(qStart + s.startWeek, s.duration)}. Drag to move, arrow keys to nudge.`}
+                  aria-label={`${barLabel({
+                    name: e.project.name,
+                    designer: dmap[s.designerId ?? '']?.name,
+                    pair: s.pairDesignerId ? dmap[s.pairDesignerId]?.name : undefined,
+                    allocation: s.allocation,
+                    confirmed: s.confirmed,
+                    phase: phaseOf(e),
+                    range: formatWeekRange(qStart + s.startWeek, s.duration),
+                  })}. Drag to move, arrow keys to nudge.`}
                   className={`mini-tl-bar ${s.confirmed ? '' : 'unconfirmed'} ${pairing ? 'pairing' : ''} ${dragging ? 'dragging' : ''}`}
                   style={{ left: `${(l / n) * 100}%`, width: `${((r - l) / n) * 100}%`, '--c': color, transformOrigin: 'left' } as React.CSSProperties}
                   initial={{ scaleX: 0, opacity: 0 }}
@@ -473,7 +483,7 @@ function MiniTimeline({
                   transition={{ delay: 0.05 + i * 0.04, duration: 0.4, ease: ease.out }}
                   onPointerDown={(ev) => onPointerDown(ev, e.project.id, e.schedule, 'move')}
                   onKeyDown={(ev) => onKeyDown(ev, e.project.id, e.schedule)}
-                  title={`${e.project.name} · ${s.phase} · ${formatWeekRange(qStart + s.startWeek, s.duration)}${pairing ? ` · pairing with ${dmap[s.designerId ?? '']?.name ?? '—'}` : ''}`}
+                  title={`${e.project.name} · ${phaseOf(e)} · ${formatWeekRange(qStart + s.startWeek, s.duration)}${pairing ? ` · pairing with ${dmap[s.designerId ?? '']?.name ?? '—'}` : ''}`}
                 >
                   <span className="handle l" onPointerDown={(ev) => onPointerDown(ev, e.project.id, e.schedule, 'l')} />
                   <span className="ellipsis">{dragging ? formatWeekRange(qStart + s.startWeek, s.duration) : `${s.allocation}%`}</span>

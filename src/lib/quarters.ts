@@ -86,3 +86,32 @@ export function formatWeekRange(startAbs: number, duration: number): string {
   const end = absWeekToUtc(startAbs + Math.max(1, duration) - 1) + 4 * DAY;
   return `${formatDate(start)} – ${formatDate(end, true)}`;
 }
+
+/**
+ * Best-effort parse of a hand-typed date ("Mar 15", "15 March 2027", "3/15",
+ * "2027-03-15", "Mar 2027"). Without a year, the date is placed on or after
+ * `refUtc` (give or take two months). Returns a UTC timestamp, or null.
+ */
+export function parseLooseDate(text: string, refUtc: number): number | null {
+  const s = text.trim().toLowerCase().replace(/(\d)(st|nd|rd|th)\b/g, '$1').replace(/[,.]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!s) return null;
+  const month = (w: string) => (w.length >= 3 ? MONTHS.findIndex((m) => m.toLowerCase().startsWith(w)) : -1);
+  const make = (y: number | null, m: number, d: number): number | null => {
+    if (m < 0 || m > 11 || d < 1 || d > 31) return null;
+    const year = y == null ? new Date(refUtc).getUTCFullYear() : y < 100 ? 2000 + y : y;
+    const at = (yr: number) => {
+      const t = Date.UTC(yr, m, d);
+      return new Date(t).getUTCDate() === d ? t : null; // rejects Feb 30 and friends
+    };
+    const t = at(year);
+    if (t != null && y == null && t < refUtc - 60 * DAY) return at(year + 1);
+    return t;
+  };
+  let m: RegExpExecArray | null;
+  if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s))) return make(+m[1], +m[2] - 1, +m[3]);
+  if ((m = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2}|\d{4}))?$/.exec(s))) return make(m[3] ? +m[3] : null, +m[1] - 1, +m[2]);
+  if ((m = /^([a-z]+) (\d{1,2})(?: (\d{4}))?$/.exec(s))) return make(m[3] ? +m[3] : null, month(m[1]), +m[2]);
+  if ((m = /^(\d{1,2}) ([a-z]+)(?: (\d{4}))?$/.exec(s))) return make(m[3] ? +m[3] : null, month(m[2]), +m[1]);
+  if ((m = /^([a-z]+) (\d{4})$/.exec(s))) return make(+m[2], month(m[1]), 1);
+  return null;
+}

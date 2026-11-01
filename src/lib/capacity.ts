@@ -34,7 +34,8 @@ export function loadLevel(pct: number): LoadLevel {
 }
 
 export function absStart(entry: Entry, startMonth: number): number {
-  return quarterStartAbsWeek(entry.project.quarter, startMonth) + entry.schedule.startWeek;
+  // Only projects planned into a quarter have schedules, so quarter is set here.
+  return quarterStartAbsWeek(entry.project.quarter!, startMonth) + entry.schedule.startWeek;
 }
 
 /** Weekly load for each designer over [fromAbs, fromAbs + n). */

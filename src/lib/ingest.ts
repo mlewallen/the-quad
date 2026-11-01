@@ -497,7 +497,8 @@ export function planImport(items: ExternalItem[], ctx: PlanContext): PlannedRow[
     const schedule: Partial<Schedule> = {};
     if (designer.designer) schedule.designerId = designer.designer.id;
     const phase = normalizePhase(item.status, ctx.config.phases);
-    if (phase) schedule.phase = phase;
+    // A tracker status pins the phase; re-importing keeps it in step with the tracker.
+    if (phase) schedule.phaseOverride = phase;
     if (item.allocation) schedule.allocation = Math.max(5, Math.min(100, item.allocation));
     if (item.durationWeeks) schedule.duration = Math.max(1, Math.round(item.durationWeeks));
     const start = parseDate(item.start);

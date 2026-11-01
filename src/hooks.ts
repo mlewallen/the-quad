@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { planKey, useStore } from './store';
 import type { Designer, ID, Plan, Project, Schedule } from './types';
 import { WEEKS_PER_QUARTER } from './types';
 import { computeLoad, type Entry, type WeekLoad } from './lib/capacity';
 import { quarterStartAbsWeek } from './lib/quarters';
+import { currentPhase, weeksIntoSchedule } from './lib/sizing';
 
 export function useWorkspace() {
   const workspaces = useStore((s) => s.workspaces);
@@ -81,7 +82,7 @@ export function useWorkspaceEntries(): Entry[] {
     }
     const out: Entry[] = [];
     for (const project of projects) {
-      if (project.workspaceId !== ws) continue;
+      if (project.workspaceId !== ws || project.quarter == null) continue;
       const sched = byQuarter.get(project.quarter)?.schedules[project.id];
       if (sched) out.push({ project, schedule: sched });
     }
@@ -99,6 +100,16 @@ export function useWorkspaceDisruptions() {
   const all = useStore((s) => s.disruptions);
   const ws = useStore((s) => s.activeWorkspaceId);
   return useMemo(() => all.filter((d) => d.workspaceId === ws), [all, ws]);
+}
+
+/**
+ * Resolves each entry's current phase: its manual override, or where today
+ * falls in the schedule's phase breakdown.
+ */
+export function usePhase(): (e: { project: Project; schedule: Schedule }) => string {
+  const phases = useWorkspace()?.config.phases ?? EMPTY;
+  const sm = useStore((s) => s.settings.fiscalStartMonth);
+  return useCallback((e) => currentPhase(phases, e.schedule, weeksIntoSchedule(e.project, e.schedule, sm)), [phases, sm]);
 }
 
 /** Per-designer weekly load over a window relative to the quarter start. */
@@ -119,18 +130,33 @@ export function useLoad(weeksBefore = 0, weeksAfter = 0): { load: Record<ID, Wee
 
 /* ---------- Hash routing ---------- */
 
-export type View = 'home' | 'gantt' | 'allocation' | 'disruptions' | 'focus' | 'manage' | 'backlog' | 'designer';
+export type View = 'home' | 'gantt' | 'team' | 'projects' | 'disruptions' | 'backlog' | 'designer';
 /** Views shown in the sidebar nav; 'designer' is reached per person. */
 export type NavView = Exclude<View, 'designer'>;
-export const VIEWS: { id: NavView; label: string; description: string }[] = [
-  { id: 'home', label: 'Home', description: 'Plans, projects and team load at a glance' },
+export const VIEWS: { id: NavView; label: string; description: string; keywords?: string }[] = [
+  { id: 'home', label: 'Home', description: 'Plan readiness, next steps and team load at a glance' },
   { id: 'gantt', label: 'Gantt', description: 'Drag to schedule, resize to change duration' },
-  { id: 'allocation', label: 'Allocation', description: 'Weekly load per designer' },
+  { id: 'team', label: 'Team', description: 'Each designer’s load, projects and allocation', keywords: 'allocation focus load people' },
+  { id: 'projects', label: 'Projects', description: 'Every project this quarter, bulk-editable', keywords: 'manage table list' },
   { id: 'disruptions', label: 'Disruptions', description: 'PTO, on-call and other non-project time' },
-  { id: 'focus', label: 'Focus', description: 'What each person is working on' },
-  { id: 'manage', label: 'Manage', description: 'Every project this quarter, bulk-editable' },
-  { id: 'backlog', label: 'Backlog', description: 'Unassigned work and the auto-balancer' },
+  { id: 'backlog', label: 'Backlog', description: 'Unassigned, unscheduled and future work, plus the auto-balancer', keywords: 'ideas requests later unscheduled' },
 ];
+
+/** Views that were merged or renamed; their old hash routes still resolve. */
+const VIEW_ALIASES: Record<string, NavView> = { focus: 'team', allocation: 'team', manage: 'projects' };
+
+function resolveView(id: string | null | undefined): View | undefined {
+  if (!id) return undefined;
+  if (id === 'designer') return 'designer';
+  return VIEWS.find((v) => v.id === id)?.id ?? VIEW_ALIASES[id];
+}
+
+/** True when the hash uses a retired view name and should be rewritten to the canonical route. */
+export function isLegacyHash(hash: string): boolean {
+  const [path, query = ''] = hash.replace(/^#\/?/, '').split('?');
+  const from = new URLSearchParams(query).get('from');
+  return path.split('/')[0] in VIEW_ALIASES || (!!from && from in VIEW_ALIASES);
+}
 
 export interface Route {
   view: View;
@@ -147,12 +173,13 @@ export function parseHash(hash: string): Route {
   const params = new URLSearchParams(query);
   const parts = path.split('/').filter(Boolean);
   if (parts[0] === 'project' && parts[1]) {
-    return { view: (params.get('from') as View) || 'gantt', project: parts[1], page: true, settings: null, designer: params.get('d') };
+    return { view: resolveView(params.get('from')) ?? 'gantt', project: parts[1], page: true, settings: null, designer: params.get('d') };
   }
   if (parts[0] === 'designer' && parts[1]) {
     return { view: 'designer', project: params.get('p'), page: false, settings: params.get('settings'), designer: parts[1] };
   }
-  const view = (VIEWS.find((v) => v.id === parts[0])?.id ?? 'gantt') as View;
+  const found = resolveView(parts[0]);
+  const view = found && found !== 'designer' ? found : 'gantt';
   return { view, project: params.get('p'), page: false, settings: params.get('settings'), designer: null };
 }
 
@@ -169,7 +196,12 @@ export function buildHash(r: Route): string {
 export function useRoute(): Route {
   const [hash, setHash] = useState(() => window.location.hash);
   useEffect(() => {
-    const on = () => setHash(window.location.hash);
+    const on = () => {
+      // Old bookmarks (#/focus, #/allocation, #/manage) land on the view that replaced them.
+      if (isLegacyHash(window.location.hash)) history.replaceState(null, '', buildHash(parseHash(window.location.hash)));
+      setHash(window.location.hash);
+    };
+    on();
     window.addEventListener('hashchange', on);
     return () => window.removeEventListener('hashchange', on);
   }, []);

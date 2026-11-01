@@ -1,21 +1,22 @@
 import { useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowDown, ArrowUp, Check, Inbox, Search, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, Inbox, Pin, Search, Trash2, X } from 'lucide-react';
 import { confirmDialog, toast } from '../feedback';
 import { spring } from '../lib/motion';
 import { useStore } from '../store';
-import { openProject, useDesignerMap, useDesigners, useQuarterStart, useWorkspace } from '../hooks';
+import { openProject, useDesignerMap, useDesigners, usePhase, useQuarterStart, useWorkspace } from '../hooks';
 import type { Entry } from '../lib/capacity';
 import type { ID } from '../types';
 import { PRIORITIES, SIZES } from '../types';
-import { formatWeekRange } from '../lib/quarters';
+import { formatAbsWeek, formatWeekRange } from '../lib/quarters';
+import { gaSlipWeeks } from '../lib/sizing';
 import { Avatar, EmptyState, PriorityChip } from './ui';
 
-type Col = 'name' | 'designer' | 'phase' | 'priority' | 'size' | 'workType' | 'start' | 'duration' | 'allocation' | 'confirmed' | 'ticket' | 'productArea' | 'pm' | 'em';
+type Col = 'name' | 'designer' | 'phase' | 'priority' | 'size' | 'workType' | 'start' | 'duration' | 'allocation' | 'ga' | 'confirmed' | 'ticket' | 'productArea' | 'pm' | 'em';
 type SortKey = Col;
 
 const COMPACT: Col[] = ['name', 'designer', 'phase', 'priority', 'start', 'confirmed'];
-const FULL: Col[] = ['name', 'ticket', 'designer', 'phase', 'priority', 'workType', 'size', 'start', 'duration', 'allocation', 'productArea', 'pm', 'em', 'confirmed'];
+const FULL: Col[] = ['name', 'ticket', 'designer', 'phase', 'priority', 'workType', 'size', 'start', 'duration', 'allocation', 'ga', 'productArea', 'pm', 'em', 'confirmed'];
 
 const PRI_ORDER = { P0: 0, P1: 1, P2: 2, P3: 3 };
 const SIZE_ORDER = { S: 0, M: 1, L: 2, XL: 3 };
@@ -25,6 +26,7 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
   const designers = useDesigners();
   const dmap = useDesignerMap();
   const qStart = useQuarterStart();
+  const phaseOf = usePhase();
   const labels = workspace.config.labels;
   const cols = variant === 'full' ? FULL : COMPACT;
 
@@ -42,7 +44,7 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
     const filtered = entries.filter(({ project: p, schedule: s }) => {
       if (ql && !`${p.name} ${p.ticket} ${p.productArea} ${p.pm} ${p.em}`.toLowerCase().includes(ql)) return false;
       if (fDesigner === '__none' ? s.designerId : fDesigner && s.designerId !== fDesigner && s.pairDesignerId !== fDesigner) return false;
-      if (fPhase && s.phase !== fPhase) return false;
+      if (fPhase && phaseOf({ project: p, schedule: s }) !== fPhase) return false;
       if (fPriority && p.priority !== fPriority) return false;
       if (fStatus === 'confirmed' && !s.confirmed) return false;
       if (fStatus === 'tentative' && s.confirmed) return false;
@@ -52,12 +54,13 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
       const { project: p, schedule: s } = e;
       switch (sort.key) {
         case 'designer': return s.designerId ? dmap[s.designerId]?.name ?? '' : '￿';
-        case 'phase': return workspace.config.phases.indexOf(s.phase);
+        case 'phase': return workspace.config.phases.indexOf(phaseOf(e));
         case 'priority': return PRI_ORDER[p.priority];
         case 'size': return SIZE_ORDER[p.size];
         case 'start': return s.startWeek;
         case 'duration': return s.duration;
         case 'allocation': return s.allocation;
+        case 'ga': return p.gaTargetWeek ?? Infinity;
         case 'confirmed': return s.confirmed ? 0 : 1;
         default: return String(p[sort.key as 'name'] ?? '').toLowerCase();
       }
@@ -67,7 +70,7 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
       const c = va < vb ? -1 : va > vb ? 1 : a.project.name.localeCompare(b.project.name);
       return c * sort.dir;
     });
-  }, [entries, query, fDesigner, fPhase, fPriority, fStatus, sort, dmap, workspace.config.phases]);
+  }, [entries, query, fDesigner, fPhase, fPriority, fStatus, sort, dmap, workspace.config.phases, phaseOf]);
 
   const visibleIds = rows.map((r) => r.project.id);
   const selIds = visibleIds.filter((id) => selected.has(id));
@@ -87,14 +90,16 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
   };
 
   const head = (key: Col, label: string) => (
-    <th key={key} className="sortable" onClick={() => setSort((s) => ({ key, dir: s.key === key ? (-s.dir as 1 | -1) : 1 }))}>
-      {label}
-      {sort.key === key && (sort.dir === 1 ? <ArrowUp size={12} className="sort-icon" /> : <ArrowDown size={12} className="sort-icon" />)}
+    <th key={key} className="sortable" aria-sort={sort.key === key ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}>
+      <button type="button" className="sort-btn" onClick={() => setSort((s) => ({ key, dir: s.key === key ? (-s.dir as 1 | -1) : 1 }))}>
+        {label}
+        {sort.key === key && (sort.dir === 1 ? <ArrowUp size={12} className="sort-icon" aria-hidden /> : <ArrowDown size={12} className="sort-icon" aria-hidden />)}
+      </button>
     </th>
   );
   const headLabels: Record<Col, string> = {
     name: labels.initiative, designer: 'Designer', phase: 'Phase', priority: 'Pri', size: 'Size', workType: 'Type',
-    start: 'When', duration: 'Wks', allocation: 'Alloc', confirmed: 'Status', ticket: labels.ticket,
+    start: 'When', duration: 'Wks', allocation: 'Alloc', ga: labels.gaTarget, confirmed: 'Status', ticket: labels.ticket,
     productArea: labels.productArea, pm: labels.pm, em: labels.em,
   };
 
@@ -155,7 +160,8 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
               const cell: Record<Col, React.ReactNode> = {
                 name: (
                   <div className="row" style={{ gap: 6 }}>
-                    <span className="ellipsis" style={{ fontWeight: 500, maxWidth: 280 }}>{p.name}</span>
+                    {/* The row click is a mouse shortcut; this button is the keyboard and screen reader way in. */}
+                    <button type="button" className="link-btn row-open ellipsis" style={{ maxWidth: 280 }} onClick={(e) => { e.stopPropagation(); openProject(p.id); }}>{p.name}</button>
                     {p.epic && <span className="chip accent">Epic</span>}
                   </div>
                 ),
@@ -166,13 +172,19 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
                     <span className="ellipsis small">{d?.name ?? <span className="faint">Unassigned</span>}</span>
                   </div>
                 ),
-                phase: <span className="small">{s.phase}</span>,
+                phase: (
+                  <span className="small row" style={{ gap: 4 }}>
+                    {phaseOf({ project: p, schedule: s })}
+                    {s.phaseOverride && <Pin size={11} className="faint" aria-label="set manually" />}
+                  </span>
+                ),
                 priority: <PriorityChip p={p.priority} />,
                 size: p.size,
                 workType: <span className="small">{p.workType}</span>,
                 start: <span className="small nowrap muted">{formatWeekRange(qStart + s.startWeek, s.duration)}</span>,
                 duration: s.duration,
                 allocation: `${s.allocation}%`,
+                ga: <GaCell project={p} schedule={s} />,
                 confirmed: s.confirmed ? <span className="chip ok">Confirmed</span> : <span className="chip">Tentative</span>,
                 ticket: <span className="mono">{p.ticket}</span>,
                 productArea: <span className="small">{p.productArea}</span>,
@@ -200,6 +212,18 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
   );
 }
 
+function GaCell({ project: p, schedule: s }: Entry) {
+  const sm = useStore((st) => st.settings.fiscalStartMonth);
+  if (p.gaTargetWeek == null) return <span className="small faint" title={p.gaTargetText || undefined}>{p.gaTargetText ? 'Note' : '–'}</span>;
+  const slip = gaSlipWeeks(p, s, sm) ?? 0;
+  return (
+    <span className="small nowrap row" style={{ gap: 6 }}>
+      {formatAbsWeek(p.gaTargetWeek)}
+      {slip > 0 && <span className="chip over" title={`Design ends ${slip} week${slip > 1 ? 's' : ''} after GA`}>+{slip}w</span>}
+    </span>
+  );
+}
+
 function BulkBar({ ids, onDone }: { ids: ID[]; onDone: () => void }) {
   const bulk = useStore((s) => s.bulkUpdate);
   const del = useStore((s) => s.deleteProjects);
@@ -220,8 +244,9 @@ function BulkBar({ ids, onDone }: { ids: ID[]; onDone: () => void }) {
         <option value="__none">Unassign</option>
         {designers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
       </select>
-      <select className="select sm" style={{ width: 'auto' }} defaultValue="" onChange={pick((v) => bulk(ids, {}, { phase: v }))}>
+      <select className="select sm" style={{ width: 'auto' }} defaultValue="" onChange={pick((v) => bulk(ids, {}, { phaseOverride: v === '__auto' ? null : v }))}>
         <option value="" disabled>Phase…</option>
+        <option value="__auto">Follow schedule</option>
         {workspace.config.phases.map((p) => <option key={p}>{p}</option>)}
       </select>
       <select className="select sm" style={{ width: 'auto' }} defaultValue="" onChange={pick((v) => bulk(ids, { priority: v as never }, {}))}>

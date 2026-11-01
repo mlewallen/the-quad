@@ -1,5 +1,6 @@
-import type { Curve, Size } from '../types';
+import type { Curve, Project, Schedule, Size } from '../types';
 import { effortWeeks } from './curves';
+import { absWeekToUtc, quarterStartAbsWeek } from './quarters';
 
 /**
  * Expected full-time effort weeks per work type at each size.
@@ -62,4 +63,38 @@ export function recommendedDurationForCurve(workType: string, size: Size, alloca
   const target = effortFor(workType, size);
   for (let d = flat; d < flat * 3 + 4; d++) if (effortWeeks(curve, d, allocationPct) >= target - 1e-6) return d;
   return flat;
+}
+
+/**
+ * The phase a project is in `weeksIn` weeks after it starts, read off
+ * phaseBreakdown. Before the start it's the first phase; after the end, the last.
+ */
+export function phaseAt(phases: string[], duration: number, weeksIn: number): string {
+  const segs = phaseBreakdown(phases, duration);
+  if (!segs.length) return '';
+  if (weeksIn < 0) return segs[0].phase;
+  return segs.find((s) => weeksIn < s.start + s.weeks)?.phase ?? segs[segs.length - 1].phase;
+}
+
+/** The phase to show for a schedule: a manual override wins, otherwise it follows the schedule. */
+export function currentPhase(phases: string[], s: Pick<Schedule, 'duration' | 'phaseOverride'>, weeksIn: number): string {
+  return s.phaseOverride || phaseAt(phases, s.duration, weeksIn);
+}
+
+const WEEK_MS = 7 * 86_400_000;
+
+/** Weeks elapsed (fractional) between a schedule's start and `now`. */
+export function weeksIntoSchedule(project: Pick<Project, 'quarter'>, s: Pick<Schedule, 'startWeek'>, startMonth: number, now = Date.now()): number {
+  if (project.quarter == null) return -1; // unscheduled work hasn't started
+  return (now - absWeekToUtc(quarterStartAbsWeek(project.quarter, startMonth) + s.startWeek)) / WEEK_MS;
+}
+
+/**
+ * How many weeks the design schedule runs past the GA target: positive means
+ * design is still going after GA, zero or less is on time, null if no target.
+ */
+export function gaSlipWeeks(project: Pick<Project, 'quarter' | 'gaTargetWeek'>, s: Pick<Schedule, 'startWeek' | 'duration'>, startMonth: number): number | null {
+  if (project.gaTargetWeek == null || project.quarter == null) return null;
+  const designEnd = quarterStartAbsWeek(project.quarter, startMonth) + s.startWeek + s.duration - 1;
+  return designEnd - project.gaTargetWeek;
 }

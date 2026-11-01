@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { CalendarRange, Diamond, Maximize2, PanelRight, Plus, SquareStack, Trash2, WandSparkles, X } from 'lucide-react';
+import { AlertTriangle, CalendarRange, Diamond, Maximize2, PanelRight, Plus, SquareStack, Trash2, Undo2, WandSparkles, X } from 'lucide-react';
 import { confirmDialog, toast } from '../feedback';
 import { readableOn } from '../lib/motion';
 import { uid, useStore } from '../store';
@@ -12,9 +12,9 @@ import { computeLoad, loadLevel } from '../lib/capacity';
 import { effortWeeks, weeklyAllocation } from '../lib/curves';
 import { formatAbsWeek, formatWeekRange } from '../lib/quarters';
 import { WeekPicker } from './WeekPicker';
-import { effortFor, phaseBreakdown, recommendedDurationForCurve } from '../lib/sizing';
+import { effortFor, gaSlipWeeks, phaseAt, phaseBreakdown, recommendedDurationForCurve, weeksIntoSchedule } from '../lib/sizing';
 import CurveEditor from './CurveEditor';
-import { DesignerSelect, Field, Section, Slider, TextInput } from './ui';
+import { DesignerSelect, Field, Section, Slider, TextInput, useFocusTrap } from './ui';
 
 export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMode }) {
   const entry = useEntry(id);
@@ -25,10 +25,13 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
   const updateProject = useStore((s) => s.updateProject);
   const updateSchedule = useStore((s) => s.updateSchedule);
   const deleteProjects = useStore((s) => s.deleteProjects);
+  const moveToQuarter = useStore((s) => s.moveToQuarter);
   const setMode = useStore((s) => s.updateSettings);
   const sm = useStore((s) => s.settings.fiscalStartMonth);
   const allEntries = useWorkspaceEntries();
   const disruptions = useWorkspaceDisruptions();
+  // A modal's focus is handled by <Modal>; the side panel and page aren't modal, so only move focus in and back.
+  const focusRef = useFocusTrap<HTMLDivElement>({ trap: false, initial: 'container' });
 
   const schedule = entry?.schedule;
   const designerLoad = useMemo(() => {
@@ -39,7 +42,7 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
 
   if (!entry) {
     return (
-      <div className="card-pad col">
+      <div className="card-pad col" ref={focusRef}>
         <div className="row">
           <h2>Not found</h2>
           <span className="spacer" />
@@ -60,6 +63,9 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
   const recommended = recommendedDurationForCurve(p.workType, p.size, s.allocation, s.curve);
   const delta = s.duration - recommended;
   const phases = phaseBreakdown(workspace.config.phases, s.duration);
+  const autoPhase = phaseAt(workspace.config.phases, s.duration, weeksIntoSchedule(p, s, sm));
+  const phase = s.phaseOverride || autoPhase;
+  const slip = gaSlipWeeks(p, s, sm);
   const thisWeekly = weeklyAllocation(s.curve, s.duration, s.allocation);
   const overWeeks = designerLoad?.filter((w) => w.total > 100.5).length ?? 0;
 
@@ -81,7 +87,7 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
     us({ milestones: s.milestones.map((m) => (m.id === mid ? { ...m, ...patch } : m)) });
 
   return (
-    <div>
+    <div ref={focusRef} aria-label={`${labels.initiative}: ${p.name}`} role="region" className="detail-root">
       <div className="detail-head">
         <div className="row" style={{ marginBottom: 6 }}>
           <span className="dot" style={{ background: color }} />
@@ -144,10 +150,16 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
           <Section title="Status">
             <div className="grid3">
               <Field label="Phase">
-                <select className="select" value={s.phase} onChange={(e) => us({ phase: e.target.value })}>
-                  {!workspace.config.phases.includes(s.phase) && <option>{s.phase}</option>}
+                <select className="select" value={s.phaseOverride ?? ''} onChange={(e) => us({ phaseOverride: e.target.value || null })} aria-describedby="phase-hint">
+                  <option value="">Auto · {autoPhase}</option>
+                  {s.phaseOverride && !workspace.config.phases.includes(s.phaseOverride) && <option>{s.phaseOverride}</option>}
                   {workspace.config.phases.map((x) => <option key={x}>{x}</option>)}
                 </select>
+                <span id="phase-hint" className="tiny faint">
+                  {s.phaseOverride ? (
+                    <>Set manually. <button className="link-btn" style={{ color: 'var(--accent)' }} onClick={() => us({ phaseOverride: null })}>Follow the schedule</button></>
+                  ) : 'Follows the schedule'}
+                </span>
               </Field>
               <Field label="Priority">
                 <select className="select" value={p.priority} onChange={(e) => up({ priority: e.target.value as Project['priority'] })}>
@@ -258,9 +270,9 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
                     key={ph.phase}
                     style={{
                       width: `${(ph.weeks / s.duration) * 100}%`,
-                      background: ph.phase === s.phase ? designer?.color ?? '#8a8a94' : 'var(--surface-3)',
-                      color: ph.phase === s.phase ? readableOn(designer?.color ?? '#8a8a94') : 'var(--text-2)',
-                      opacity: ph.phase === s.phase ? 1 : 0.6 + (i / phases.length) * 0.4,
+                      background: ph.phase === phase ? designer?.color ?? '#8a8a94' : 'var(--surface-3)',
+                      color: ph.phase === phase ? readableOn(designer?.color ?? '#8a8a94') : 'var(--text-2)',
+                      opacity: ph.phase === phase ? 1 : 0.6 + (i / phases.length) * 0.4,
                     }}
                     title={`${ph.phase}: ~${ph.weeks.toFixed(1)} wks`}
                   >
@@ -286,7 +298,25 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
           <Section title="Context & Partners">
             <div className="grid2">
               <Field label={labels.goal}><TextInput value={p.goal} onCommit={(v) => up({ goal: v })} /></Field>
-              <Field label={labels.gaTarget}><TextInput value={p.gaTarget} onCommit={(v) => up({ gaTarget: v })} placeholder="e.g. Mar 15" /></Field>
+              <Field label={labels.gaTarget}>
+                <div className="row" style={{ gap: 4 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <WeekPicker
+                      value={p.gaTargetWeek ?? qStart + s.startWeek + s.duration}
+                      label={p.gaTargetWeek == null ? 'Not set' : `Week of ${formatAbsWeek(p.gaTargetWeek, true)}`}
+                      onChange={(w) => up({ gaTargetWeek: w, gaTargetText: '' })}
+                      ariaLabel={labels.gaTarget}
+                    />
+                  </div>
+                  {p.gaTargetWeek != null && (
+                    <button className="btn icon ghost sm" aria-label={`Clear ${labels.gaTarget}`} onClick={() => up({ gaTargetWeek: null })}><X size={14} /></button>
+                  )}
+                </div>
+                {p.gaTargetText && p.gaTargetWeek == null && <span className="tiny faint">Previously noted as “{p.gaTargetText}”</span>}
+                {slip != null && slip > 0 && (
+                  <span className="tiny" style={{ color: 'var(--over)' }}><AlertTriangle size={11} style={{ verticalAlign: -1 }} /> Design ends {slip} wk{slip > 1 ? 's' : ''} after {labels.gaTarget}</span>
+                )}
+              </Field>
               <Field label={labels.productArea}><TextInput value={p.productArea} onCommit={(v) => up({ productArea: v })} /></Field>
               <div />
               <Field label={labels.pm}><TextInput value={p.pm} onCommit={(v) => up({ pm: v })} /></Field>
@@ -301,6 +331,20 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
           <div className="card-pad row">
             <span className="tiny faint">Metadata is shared across plans; schedule fields belong to the active plan.</span>
             <span className="spacer" />
+            <button
+              className="btn sm ghost"
+              title="Take it out of this quarter's plans and back into the backlog"
+              onClick={async () => {
+                const ok = await confirmDialog({ title: `Move “${p.name}” to the backlog?`, body: 'It leaves every plan this quarter, so its designer and dates are cleared. Its details stay.', confirmLabel: 'Move to backlog' });
+                if (ok) {
+                  closeProject();
+                  moveToQuarter([p.id], null);
+                  toast(`${p.name} moved to the backlog`);
+                }
+              }}
+            >
+              <Undo2 size={13} /> Unschedule
+            </button>
             <button
               className="btn sm ghost danger"
               onClick={async () => {

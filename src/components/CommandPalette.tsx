@@ -53,7 +53,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
     return [
       ...VIEWS.map((v, i) => {
         const Icon = VIEW_ICONS[v.id];
-        return { id: `view:${v.id}`, group: 'Go to', label: v.label, hint: String(i + 1), icon: <Icon size={16} />, keywords: v.description, run: () => navigate({ view: v.id, project: null, page: false, designer: null }) };
+        return { id: `view:${v.id}`, group: 'Go to', label: v.label, hint: String(i + 1), icon: <Icon size={16} />, keywords: `${v.description} ${v.keywords ?? ''}`, run: () => navigate({ view: v.id, project: null, page: false, designer: null }) };
       }),
       ...designers.map((d) => ({
         id: `d:${d.id}`,

@@ -49,8 +49,10 @@ export interface Workspace {
 export interface Project {
   id: ID;
   workspaceId: ID;
-  /** Quarter index, see lib/quarters.ts */
-  quarter: number;
+  /** Quarter index, see lib/quarters.ts. Null means unscheduled: it sits in the backlog with no plan. */
+  quarter: number | null;
+  /** Order within the unscheduled backlog (lower is higher); null once it's planned into a quarter. */
+  backlogRank: number | null;
   name: string;
   ticket: string;
   reference: string;
@@ -61,7 +63,10 @@ export interface Project {
   pm: string;
   em: string;
   goal: string;
-  gaTarget: string;
+  /** GA / launch target as an absolute week (see lib/quarters.ts), or null when not set. */
+  gaTargetWeek: number | null;
+  /** Free-text GA target from before it was a date, kept when it couldn't be parsed. */
+  gaTargetText: string;
   productArea: string;
   notes: string;
   createdAt: number;
@@ -97,7 +102,11 @@ export interface Curve {
 export interface Schedule {
   designerId: ID | null;
   pairDesignerId: ID | null;
-  phase: string;
+  /**
+   * Manually chosen phase. Null means the phase follows the schedule
+   * (see currentPhase in lib/sizing.ts).
+   */
+  phaseOverride: string | null;
   /** Week offset relative to the project's quarter start (may be negative or >12). */
   startWeek: number;
   duration: number;
