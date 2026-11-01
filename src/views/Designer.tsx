@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  AlertTriangle, ArrowLeft, CalendarOff, CircleCheck, Diamond, Gauge, Layers, Lightbulb, Palette, Sparkles, Timer, UserX, Users,
+  AlertTriangle, ArrowLeft, CalendarOff, Check, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, Diamond, Gauge, Layers, Lightbulb, Palette, Sparkles, Timer, UserX, Users,
 } from 'lucide-react';
 import {
   navigate, openDesigner, openProject, useDesignerMap, useDesigners, useEntries, useLoad, useQuarterStart, useRoute, useWorkspace,
@@ -16,6 +16,83 @@ import { useBarDrag } from '../lib/useBarDrag';
 import { useStore } from '../store';
 import { ease, readableOn, staggerChild, staggerParent } from '../lib/motion';
 import { Avatar, EmptyState, LoadChip, PriorityChip, TextInput } from '../components/ui';
+import { MenuItem, MenuLabel, Popover } from '../components/Popover';
+
+/**
+ * Steps through the team in sidebar order. Linear rather than wrapping, so with
+ * two designers there is one live arrow instead of two identical ones; the
+ * middle button jumps to anyone. ←/→ step too, unless focus is in a field.
+ */
+function DesignerSwitcher({ current, designers, load }: { current: Designer; designers: Designer[]; load: Record<ID, WeekLoad[]> }) {
+  const idx = designers.findIndex((d) => d.id === current.id);
+  const prev = idx > 0 ? designers[idx - 1] : null;
+  const next = idx < designers.length - 1 ? designers[idx + 1] : null;
+
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      const t = e.target instanceof Element ? e.target : null;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || t?.closest('input, textarea, select, [contenteditable], [role=dialog], [role=alertdialog], [role=menu], .palette, .gantt-bar, .mini-tl-bar')) return;
+      const to = e.key === 'ArrowLeft' ? prev : e.key === 'ArrowRight' ? next : null;
+      if (to) {
+        e.preventDefault();
+        openDesigner(to.id);
+      }
+    };
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  }, [prev, next]);
+
+  return (
+    <div className="ctx-control designer-switcher" role="group" aria-label="Switch designer">
+      <button
+        className="btn icon ghost sm"
+        disabled={!prev}
+        onClick={() => prev && openDesigner(prev.id)}
+        aria-label={prev ? `Previous designer: ${prev.name}` : 'No previous designer'}
+        title={prev ? `${prev.name}  ←` : undefined}
+      >
+        <ChevronLeft size={16} />
+      </button>
+      <Popover
+        align="end"
+        width={260}
+        trigger={({ open, toggle }) => (
+          <button className={`switcher-pos ${open ? 'open' : ''}`} onClick={toggle} aria-haspopup="menu" aria-expanded={open} aria-label={`Designer ${idx + 1} of ${designers.length}. Jump to designer`}>
+            <span className="num">{idx + 1}</span>
+            <span className="faint">of {designers.length}</span>
+            <ChevronDown size={13} className="faint" />
+          </button>
+        )}
+      >
+        {(close) => (
+          <>
+            <MenuLabel>Team</MenuLabel>
+            {designers.map((d) => (
+              <MenuItem
+                key={d.id}
+                active={d.id === current.id}
+                icon={<Avatar designer={d} />}
+                hint={<span className="row" style={{ gap: 6 }}><LoadChip pct={summarize(load[d.id] ?? []).avg} />{d.id === current.id ? <Check size={14} /> : <span style={{ width: 14 }} />}</span>}
+                onSelect={() => { close(); if (d.id !== current.id) openDesigner(d.id); }}
+              >
+                {d.name}
+              </MenuItem>
+            ))}
+          </>
+        )}
+      </Popover>
+      <button
+        className="btn icon ghost sm"
+        disabled={!next}
+        onClick={() => next && openDesigner(next.id)}
+        aria-label={next ? `Next designer: ${next.name}` : 'No next designer'}
+        title={next ? `${next.name}  →` : undefined}
+      >
+        <ChevronRight size={16} />
+      </button>
+    </div>
+  );
+}
 
 /** Per-project shade of the designer's color so stacked segments stay distinguishable. */
 function shade(color: string, i: number) {
@@ -89,9 +166,6 @@ function DesignerBody({ designer }: { designer: Designer }) {
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
   };
 
-  const idx = designers.findIndex((d) => d.id === designer.id);
-  const prev = designers[(idx - 1 + designers.length) % designers.length];
-  const next = designers[(idx + 1) % designers.length];
 
   return (
     <div className="view designer-view">
@@ -101,7 +175,7 @@ function DesignerBody({ designer }: { designer: Designer }) {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0, transition: { duration: 0.3, ease: ease.out } }}
       >
-        <div className="row" style={{ gap: 14, alignItems: 'flex-start' }}>
+        <div className="row hero-top" style={{ gap: 14, alignItems: 'flex-start' }}>
           <label className="hero-avatar" style={{ background: designer.color, color: readableOn(designer.color) }} title="Change color">
             {designer.name.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase()}
             <input type="color" value={designer.color} onChange={(e) => updateDesigner(designer.id, { color: e.target.value })} aria-label={`Color for ${designer.name}`} />
@@ -117,12 +191,7 @@ function DesignerBody({ designer }: { designer: Designer }) {
               <span>{confirmed}/{primary} confirmed</span>
             </div>
           </div>
-          {designers.length > 1 && (
-            <div className="row" style={{ gap: 4 }}>
-              <button className="btn sm ghost" onClick={() => openDesigner(prev.id)} title={`Previous: ${prev.name}`}><Avatar designer={prev} /></button>
-              <button className="btn sm ghost" onClick={() => openDesigner(next.id)} title={`Next: ${next.name}`}><Avatar designer={next} /></button>
-            </div>
-          )}
+          {designers.length > 1 && <DesignerSwitcher current={designer} designers={designers} load={load} />}
         </div>
 
         <motion.div className="kpis" variants={staggerParent} initial="initial" animate="animate">
