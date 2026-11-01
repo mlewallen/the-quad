@@ -167,16 +167,26 @@ function Ring({ value, tone }: { value: number; tone: string }) {
   return (
     <div className="ring" role="img" aria-label={`Readiness ${value}%`}>
       <svg viewBox="0 0 84 84" width="84" height="84">
-        <circle cx="42" cy="42" r={R} fill="none" stroke="var(--surface-3)" strokeWidth="8" />
+        <circle cx="42" cy="42" r={R} fill="none" stroke="var(--surface-3)" strokeWidth="7" />
         <motion.circle
-          cx="42" cy="42" r={R} fill="none" stroke={color} strokeWidth="8" strokeLinecap="round"
+          cx="42" cy="42" r={R} fill="none" stroke={color} strokeWidth="7" strokeLinecap="round"
           transform="rotate(-90 42 42)" strokeDasharray={C}
           initial={{ strokeDashoffset: C }}
           animate={{ strokeDashoffset: C * (1 - value / 100) }}
           transition={{ duration: 1, ease: ease.out }}
         />
       </svg>
-      <div className="ring-label"><b className="num">{value}</b><span>%</span></div>
+      {/* A full ring reads as done, so it gets a check rather than "100%". */}
+      {value >= 100 ? (
+        <motion.span className="ring-label done" style={{ color }} initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ ...spring.smooth, delay: 0.6 }}>
+          <Check size={30} strokeWidth={3} />
+        </motion.span>
+      ) : (
+        <span className="ring-label">
+          <b className="num">{value}</b>
+          <span className="ring-unit">%</span>
+        </span>
+      )}
     </div>
   );
 }
