@@ -106,8 +106,8 @@ export function Field({ label, children }: { label: string; children: ReactNode 
 
 /** Text input that commits on blur/enter, so typing doesn't spam the store. */
 export function TextInput({
-  value, onCommit, placeholder, className = 'input', type = 'text',
-}: { value: string; onCommit: (v: string) => void; placeholder?: string; className?: string; type?: string }) {
+  value, onCommit, placeholder, className = 'input', type = 'text', ariaLabel,
+}: { value: string; onCommit: (v: string) => void; placeholder?: string; className?: string; type?: string; ariaLabel?: string }) {
   const [v, setV] = useState(value);
   useEffect(() => setV(value), [value]);
   return (
@@ -116,6 +116,7 @@ export function TextInput({
       type={type}
       value={v}
       placeholder={placeholder}
+      aria-label={ariaLabel}
       onChange={(e) => setV(e.target.value)}
       onBlur={() => v !== value && onCommit(v)}
       onKeyDown={(e) => {

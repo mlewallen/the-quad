@@ -260,7 +260,7 @@ function Team() {
       </AnimatePresence>
       {!ws.designers.length && <div className="set-row"><span className="small faint">No designers yet. Add your first one below.</span></div>}
       <div className="set-row designer-row add">
-        <span className="color-dot empty"><Plus size={13} /></span>
+        <span className="color-dot placeholder" aria-hidden><Plus size={13} /></span>
         <input className="input" placeholder="New designer’s name" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
         <button className="btn primary sm" disabled={!name.trim()} onClick={add}>Add</button>
       </div>
