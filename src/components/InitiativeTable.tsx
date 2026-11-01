@@ -90,9 +90,11 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
   };
 
   const head = (key: Col, label: string) => (
-    <th key={key} className="sortable" onClick={() => setSort((s) => ({ key, dir: s.key === key ? (-s.dir as 1 | -1) : 1 }))}>
-      {label}
-      {sort.key === key && (sort.dir === 1 ? <ArrowUp size={12} className="sort-icon" /> : <ArrowDown size={12} className="sort-icon" />)}
+    <th key={key} className="sortable" aria-sort={sort.key === key ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}>
+      <button type="button" className="sort-btn" onClick={() => setSort((s) => ({ key, dir: s.key === key ? (-s.dir as 1 | -1) : 1 }))}>
+        {label}
+        {sort.key === key && (sort.dir === 1 ? <ArrowUp size={12} className="sort-icon" aria-hidden /> : <ArrowDown size={12} className="sort-icon" aria-hidden />)}
+      </button>
     </th>
   );
   const headLabels: Record<Col, string> = {
@@ -158,7 +160,8 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
               const cell: Record<Col, React.ReactNode> = {
                 name: (
                   <div className="row" style={{ gap: 6 }}>
-                    <span className="ellipsis" style={{ fontWeight: 500, maxWidth: 280 }}>{p.name}</span>
+                    {/* The row click is a mouse shortcut; this button is the keyboard and screen reader way in. */}
+                    <button type="button" className="link-btn row-open ellipsis" style={{ maxWidth: 280 }} onClick={(e) => { e.stopPropagation(); openProject(p.id); }}>{p.name}</button>
                     {p.epic && <span className="chip accent">Epic</span>}
                   </div>
                 ),

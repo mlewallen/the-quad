@@ -15,7 +15,7 @@ import { formatAbsWeek, formatWeekRange, utcToAbsWeek } from '../lib/quarters';
 import { useBarDrag } from '../lib/useBarDrag';
 import { useStore } from '../store';
 import { ease, readableOn, staggerChild, staggerParent } from '../lib/motion';
-import { Avatar, EmptyState, LoadChip, PriorityChip, TextInput } from '../components/ui';
+import { Avatar, barLabel, EmptyState, LoadChip, PriorityChip, TextInput } from '../components/ui';
 import { MenuItem, MenuLabel, Popover } from '../components/Popover';
 
 /**
@@ -183,9 +183,9 @@ function DesignerBody({ designer }: { designer: Designer }) {
             <span className="hero-avatar-edit" aria-hidden><Palette size={11} /></span>
           </label>
           <div className="col" style={{ gap: 4, flex: 1, minWidth: 0 }}>
-            <h1>
+            <h2 className="hero-name-heading">
               <TextInput className="hero-name" value={designer.name} ariaLabel="Designer name" onCommit={(v) => v.trim() && updateDesigner(designer.id, { name: v.trim() })} />
-            </h1>
+            </h2>
             <div className="row small faint" style={{ flexWrap: 'wrap' }}>
               <span>{workspace.name}</span>·
               <span>{primary} owned · {mine.length - primary} pairing</span>·
@@ -246,7 +246,7 @@ function DesignerBody({ designer }: { designer: Designer }) {
                         <td>
                           <div className="row" style={{ gap: 8 }}>
                             <span className="swatch-sq" style={{ background: colorOf.get(e.project.id) }} />
-                            <span className="ellipsis" style={{ fontWeight: 500, maxWidth: 220 }}>{e.project.name}</span>
+                            <button type="button" className="link-btn row-open ellipsis" style={{ maxWidth: 220 }} onClick={(ev) => { ev.stopPropagation(); openProject(e.project.id); }}>{e.project.name}</button>
                             {partner && <span className="chip" title={pairing ? `Pairing with ${partner.name}` : `Paired with ${partner.name}`}><Users size={11} /> {partner.name.split(' ')[0]}</span>}
                           </div>
                         </td>
@@ -467,7 +467,15 @@ function MiniTimeline({
                 <motion.div
                   role="button"
                   tabIndex={0}
-                  aria-label={`${e.project.name}, ${formatWeekRange(qStart + s.startWeek, s.duration)}. Drag to move, arrow keys to nudge.`}
+                  aria-label={`${barLabel({
+                    name: e.project.name,
+                    designer: dmap[s.designerId ?? '']?.name,
+                    pair: s.pairDesignerId ? dmap[s.pairDesignerId]?.name : undefined,
+                    allocation: s.allocation,
+                    confirmed: s.confirmed,
+                    phase: phaseOf(e),
+                    range: formatWeekRange(qStart + s.startWeek, s.duration),
+                  })}. Drag to move, arrow keys to nudge.`}
                   className={`mini-tl-bar ${s.confirmed ? '' : 'unconfirmed'} ${pairing ? 'pairing' : ''} ${dragging ? 'dragging' : ''}`}
                   style={{ left: `${(l / n) * 100}%`, width: `${((r - l) / n) * 100}%`, '--c': color, transformOrigin: 'left' } as React.CSSProperties}
                   initial={{ scaleX: 0, opacity: 0 }}

@@ -14,7 +14,7 @@ import { formatAbsWeek, formatWeekRange } from '../lib/quarters';
 import { WeekPicker } from './WeekPicker';
 import { effortFor, gaSlipWeeks, phaseAt, phaseBreakdown, recommendedDurationForCurve, weeksIntoSchedule } from '../lib/sizing';
 import CurveEditor from './CurveEditor';
-import { DesignerSelect, Field, Section, Slider, TextInput } from './ui';
+import { DesignerSelect, Field, Section, Slider, TextInput, useFocusTrap } from './ui';
 
 export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMode }) {
   const entry = useEntry(id);
@@ -30,6 +30,8 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
   const sm = useStore((s) => s.settings.fiscalStartMonth);
   const allEntries = useWorkspaceEntries();
   const disruptions = useWorkspaceDisruptions();
+  // A modal's focus is handled by <Modal>; the side panel and page aren't modal, so only move focus in and back.
+  const focusRef = useFocusTrap<HTMLDivElement>({ trap: false, initial: 'container' });
 
   const schedule = entry?.schedule;
   const designerLoad = useMemo(() => {
@@ -40,7 +42,7 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
 
   if (!entry) {
     return (
-      <div className="card-pad col">
+      <div className="card-pad col" ref={focusRef}>
         <div className="row">
           <h2>Not found</h2>
           <span className="spacer" />
@@ -85,7 +87,7 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
     us({ milestones: s.milestones.map((m) => (m.id === mid ? { ...m, ...patch } : m)) });
 
   return (
-    <div>
+    <div ref={focusRef} aria-label={`${labels.initiative}: ${p.name}`} role="region" className="detail-root">
       <div className="detail-head">
         <div className="row" style={{ marginBottom: 6 }}>
           <span className="dot" style={{ background: color }} />

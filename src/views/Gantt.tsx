@@ -13,7 +13,7 @@ import type { Entry, WeekLoad } from '../lib/capacity';
 import { loadLevel, summarize } from '../lib/capacity';
 import { weeklyAllocation } from '../lib/curves';
 import { formatAbsWeek, formatWeekRange, utcToAbsWeek } from '../lib/quarters';
-import { Avatar, EmptyState, HealthStrip, LoadChip, PriorityChip, Toolbar } from '../components/ui';
+import { Avatar, barLabel, EmptyState, HealthStrip, LoadChip, PriorityChip, Toolbar } from '../components/ui';
 
 interface Hover {
   x: number;
@@ -32,6 +32,7 @@ export default function Gantt() {
   const workspace = useWorkspace()!;
   const designers = useDesigners();
   const dmap = useDesignerMap();
+  const phaseOf = usePhase();
   const entries = useEntries();
   const disruptions = useWorkspaceDisruptions();
   const qStart = useQuarterStart();
@@ -197,7 +198,15 @@ export default function Gantt() {
                               role="button"
                               tabIndex={0}
                               onKeyDown={(ev) => onKeyDown(ev, e.project.id, s)}
-                              aria-label={`${e.project.name}, ${formatWeekRange(qStart + s.startWeek, s.duration)}`}
+                              aria-label={`${barLabel({
+                                name: e.project.name,
+                                designer: designer?.name,
+                                pair: s.pairDesignerId ? dmap[s.pairDesignerId]?.name : undefined,
+                                allocation: s.allocation,
+                                confirmed: s.confirmed,
+                                phase: phaseOf(e),
+                                range: formatWeekRange(qStart + s.startWeek, s.duration),
+                              })}. Enter opens it; arrow keys move it, Shift with arrows resizes.`}
                             >
                               <span className="handle l" onPointerDown={(ev) => onBarPointerDown(ev, e, 'l')} />
                               <CurveFill entry={e} />

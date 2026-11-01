@@ -1,9 +1,13 @@
 import type { FieldLabels, Settings, TeamType, WorkspaceConfig } from '../types';
 
+/** Every color gives bar text (white or near-black, see readableOn) at least 4.5:1. */
 export const DESIGNER_COLORS = [
-  '#6366f1', '#ec4899', '#14b8a6', '#f59e0b', '#8b5cf6', '#ef4444',
+  '#4f46e5', '#ec4899', '#14b8a6', '#f59e0b', '#7c3aed', '#ef4444',
   '#0ea5e9', '#22c55e', '#f97316', '#a855f7', '#06b6d4', '#84cc16',
 ];
+
+/** Earlier palette colors that no text color could reach 4.5:1 on, and their one-step-darker replacements. */
+export const RETIRED_DESIGNER_COLORS: Record<string, string> = { '#6366f1': '#4f46e5', '#8b5cf6': '#7c3aed' };
 
 export const ACCENT_PRESETS = ['#5b5bd6', '#0d9488', '#e5484d', '#d97706', '#0284c7', '#9333ea', '#16a34a'];
 

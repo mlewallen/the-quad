@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import type {
   Designer, Disruption, ID, PersistedState, Plan, Project, Schedule, Settings, Size, TeamType, Workspace,
 } from './types';
-import { DEFAULT_SETTINGS, DESIGNER_COLORS, defaultConfig } from './lib/defaults';
+import { DEFAULT_SETTINGS, DESIGNER_COLORS, RETIRED_DESIGNER_COLORS, defaultConfig } from './lib/defaults';
 import { currentQuarter, parseLooseDate, quarterStartUtc, utcToAbsWeek } from './lib/quarters';
 import { defaultAllocation, phaseAt, recommendedDuration, weeksIntoSchedule } from './lib/sizing';
 import { celebrationTitle, type CelebrationId } from './lib/celebrations';
@@ -12,7 +12,7 @@ import { currentDataKey } from './lib/session';
 
 /** The current account's storage key (see lib/session.ts). Read at call time; it changes on sign-in. */
 export const storageKey = () => useStore.persist.getOptions().name ?? currentDataKey();
-export const STATE_VERSION = 7;
+export const STATE_VERSION = 8;
 
 export const uid = () => crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 
@@ -732,6 +732,14 @@ export function migrate(raw: Partial<PersistedState>, version: number): Persiste
   // v7: the backlog can hold unscheduled work (quarter null), ranked by backlogRank.
   // Everything saved before this was planned into a quarter.
   if (version < 7) state.projects = state.projects.map((p) => ({ ...p, quarter: p.quarter ?? state.currentQuarter, backlogRank: p.backlogRank ?? null }));
+  // v8: two palette colors were too light for readable bar text; move designers
+  // still on them to the darker replacement. Custom colors are left alone.
+  if (version < 8) {
+    state.workspaces = state.workspaces.map((w) => ({
+      ...w,
+      designers: w.designers.map((d) => ({ ...d, color: RETIRED_DESIGNER_COLORS[d.color?.toLowerCase()] ?? d.color })),
+    }));
+  }
   // Backfill unlocks that are provable from existing data (time unknown -> 0).
   state.unlocked = { ...(state.unlocked ?? {}) };
   if (state.projects.length && !('first-initiative' in state.unlocked)) state.unlocked['first-initiative'] = 0;

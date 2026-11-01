@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { useStore } from './store';
 import { closeProject, navigate, useIsMobile, useRoute, useWorkspace, VIEWS } from './hooks';
@@ -15,7 +15,7 @@ import { useAccount } from './account';
 import SettingsPanel from './components/Settings';
 import ProjectDetail from './components/ProjectDetail';
 import Celebration from './components/Celebration';
-import { Modal } from './components/ui';
+import { Modal, useEscape } from './components/ui';
 import Home from './views/Home';
 import Gantt from './views/Gantt';
 import Team from './views/Team';
@@ -143,12 +143,12 @@ export default function App() {
         </div>
         <AnimatePresence>
           {route.project && !showPage && mode === 'modal' && (
-            <Modal key="detail" onClose={closeProject}>
+            <Modal key="detail" onClose={closeProject} label="Project details">
               <ProjectDetail id={route.project} mode="modal" />
             </Modal>
           )}
           {route.settings && (
-            <Modal key="settings" size="settings" onClose={() => navigate({ settings: null })}>
+            <Modal key="settings" size="settings" onClose={() => navigate({ settings: null })} label="Settings">
               <SettingsPanel section={route.settings} />
             </Modal>
           )}
@@ -168,6 +168,11 @@ function SidePanel({ id }: { id: string }) {
   const width = useStore((s) => s.settings.panelWidth);
   const update = useStore((s) => s.updateSettings);
   const [dragging, setDragging] = useState(false);
+  // Escape closes the panel (focus then returns to what opened it), unless a field is
+  // being edited: there Escape first reverts the edit.
+  useEscape(useCallback(() => {
+    if (!document.activeElement?.closest('input, textarea, select, [contenteditable]')) closeProject();
+  }, []));
 
   const onPointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -186,6 +191,7 @@ function SidePanel({ id }: { id: string }) {
 
   return (
     <motion.aside
+      aria-label="Project details"
       className="side-panel"
       initial={{ width: 0, opacity: 0 }}
       animate={{ width, opacity: 1, transition: dragging ? { duration: 0 } : spring.smooth }}

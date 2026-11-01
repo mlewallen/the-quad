@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ChevronRight, type LucideIcon } from 'lucide-react';
 import type { Designer } from '../types';
@@ -19,6 +19,19 @@ export function Avatar({ designer, size }: { designer?: Designer; size?: 'lg' })
   );
 }
 
+/** Accessible name for a schedule bar: everything the bar's color, styling and position show. */
+export function barLabel(o: { name: string; designer?: string; pair?: string; allocation: number; confirmed: boolean; range: string; phase?: string }) {
+  return [
+    o.name,
+    o.designer ?? 'Unassigned',
+    o.pair ? `paired with ${o.pair}` : '',
+    `${o.allocation}%`,
+    o.confirmed ? 'confirmed' : 'tentative',
+    o.phase ?? '',
+    o.range,
+  ].filter(Boolean).join(', ');
+}
+
 export function PriorityChip({ p }: { p: string }) {
   return <span className={`chip ${p.toLowerCase()}`}>{p}</span>;
 }
@@ -28,9 +41,69 @@ export function LoadChip({ pct }: { pct: number }) {
   return <span className={`chip load ${lvl === 'idle' ? '' : lvl}`}>{Math.round(pct)}%</span>;
 }
 
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function focusables(root: HTMLElement): HTMLElement[] {
+  return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.offsetParent !== null || el === document.activeElement);
+}
+
+/**
+ * Focus management for dialogs and panels: moves focus in when mounted (to an
+ * element already focused inside, a [data-autofocus] element, the first
+ * focusable control, or the container itself), optionally keeps Tab inside,
+ * and returns focus to whatever had it before when unmounted.
+ */
+export function useFocusTrap<T extends HTMLElement>({ trap = true, initial = 'first' }: { trap?: boolean; initial?: 'first' | 'container' } = {}): RefObject<T | null> {
+  const ref = useRef<T>(null);
+  // Read during the first render: by the time effects run, autoFocus inside may already have moved focus.
+  const [previous] = useState(() => (document.activeElement instanceof HTMLElement ? document.activeElement : null));
+  useEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    // autoFocus inside has already run by now; respect it.
+    if (!root.contains(document.activeElement)) {
+      const target = root.querySelector<HTMLElement>('[data-autofocus]') ?? (initial === 'first' ? focusables(root)[0] : undefined) ?? root;
+      if (target === root && !root.hasAttribute('tabindex')) root.setAttribute('tabindex', '-1');
+      target.focus({ preventScroll: true });
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (!trap || e.key !== 'Tab') return;
+      // An inner layer (confirm dialog, popover) handles its own Tab.
+      if (document.querySelector('[role=alertdialog]') && !root.querySelector('[role=alertdialog]')) return;
+      const items = focusables(root);
+      if (!items.length) {
+        e.preventDefault();
+        root.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const inside = root.contains(document.activeElement);
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === root || !inside)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (document.activeElement === last || !inside)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      // A real close has already removed the dialog from the DOM by now. If it's still
+      // attached (StrictMode's dev-only remount, or the options changed), keep focus where it is.
+      if (root.isConnected) return;
+      // Only hand focus back if it's still ours to give (not moved on to something new).
+      if (previous?.isConnected && (root.contains(document.activeElement) || document.activeElement === document.body || !document.activeElement)) previous.focus({ preventScroll: true });
+    };
+  }, [trap, initial, previous]);
+  return ref;
+}
+
 /** Overlay + dialog with spring entrance. Must be rendered inside <AnimatePresence>. */
-export function Modal({ onClose, children, wide, size }: { onClose: () => void; children: ReactNode; wide?: boolean; size?: 'settings' }) {
+export function Modal({ onClose, children, wide, size, label }: { onClose: () => void; children: ReactNode; wide?: boolean; size?: 'settings'; label?: string }) {
   useEscape(onClose);
+  const ref = useFocusTrap<HTMLDivElement>();
   // Phones get a bottom sheet instead of a centred dialog.
   const sheet = useIsMobile();
   return (
@@ -41,7 +114,7 @@ export function Modal({ onClose, children, wide, size }: { onClose: () => void; 
       exit={{ opacity: 0, transition: { duration: 0.14 } }}
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <motion.div className={`modal ${wide ? 'wide' : ''} ${size ? `${size}-modal` : ''} ${sheet ? 'sheet' : ''}`} role="dialog" aria-modal="true" variants={sheet ? sheetIn : dialogIn} initial="initial" animate="animate" exit="exit">
+      <motion.div ref={ref} className={`modal ${wide ? 'wide' : ''} ${size ? `${size}-modal` : ''} ${sheet ? 'sheet' : ''}`} role="dialog" aria-modal="true" aria-label={label} variants={sheet ? sheetIn : dialogIn} initial="initial" animate="animate" exit="exit">
         {sheet && <span className="sheet-grabber" aria-hidden />}
         {children}
       </motion.div>

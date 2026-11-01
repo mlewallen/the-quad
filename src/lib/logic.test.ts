@@ -7,6 +7,8 @@ import { parseDelimited } from './csv';
 import { parseLooseDate, quarterForDate, quarterStartAbsWeek, quarterStartUtc, utcToAbsWeek } from './quarters';
 import { backlogOf, migrate, useStore } from '../store';
 import { buildDemo } from './demo';
+import { DESIGNER_COLORS } from './defaults';
+import { readableOn } from './motion';
 import type { Project, Schedule } from '../types';
 
 const project = (id: string, extra: Partial<Project> = {}): Project => ({
@@ -236,6 +238,25 @@ describe('backlog', () => {
     expect(next.schedules[x]).toMatchObject({ designerId: null });
     expect(s.activePlan[`w:${q + 1}`]).toBe(next.id);
     expect(s.projects.find((p) => p.id === x)).toMatchObject({ quarter: q + 1, backlogRank: null });
+  });
+});
+
+describe('designer color migration', () => {
+  it('darkens retired palette colors and keeps custom ones (v7 → v8)', () => {
+    const v7 = { version: 7, projects: [], plans: [], workspaces: [{ id: 'w', name: 'W', config: { teamType: 'product' }, designers: [
+      { id: 'a', name: 'A', color: '#6366F1' }, { id: 'b', name: 'B', color: '#8b5cf6' }, { id: 'c', name: 'C', color: '#123456' },
+    ] }] };
+    expect(migrate(v7 as never, 7).workspaces[0].designers.map((d) => d.color)).toEqual(['#4f46e5', '#7c3aed', '#123456']);
+  });
+  it('every palette color has a readable bar text color', () => {
+    const lum = (h: string) => {
+      const hex = h.length === 4 ? h.slice(1).replace(/./g, '$&$&') : h.slice(1);
+      const n = parseInt(hex, 16);
+      const l = (c: number) => ((c /= 255) <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+      return 0.2126 * l((n >> 16) & 255) + 0.7152 * l((n >> 8) & 255) + 0.0722 * l(n & 255);
+    };
+    const ratio = (a: string, b: string) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
+    for (const c of DESIGNER_COLORS) expect(ratio(c, readableOn(c))).toBeGreaterThanOrEqual(4.5);
   });
 });
 
