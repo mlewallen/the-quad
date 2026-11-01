@@ -82,7 +82,7 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
   const addMilestone = () => {
     const used = new Set(s.milestones.map((m) => m.type));
     const type = workspace.config.milestoneTypes.find((t) => !used.has(t)) ?? workspace.config.milestoneTypes[0] ?? 'Milestone';
-    us({ milestones: [...s.milestones, { id: uid(), type, offset: Math.max(0, s.duration - 1), note: '' }] });
+    us({ milestones: [...s.milestones, { id: uid(), type, offset: Math.max(0, s.duration - 1), note: '', kind: 'deliver' }] });
   };
   const updMilestone = (mid: string, patch: Partial<Milestone>) =>
     us({ milestones: s.milestones.map((m) => (m.id === mid ? { ...m, ...patch } : m)) });

@@ -3,7 +3,7 @@ import { WEEKS_PER_QUARTER } from '../types';
 import { defaultConfig, DESIGNER_COLORS } from './defaults';
 import { weeklyAllocation } from './curves';
 import { quarterStartAbsWeek } from './quarters';
-import { recommendedDuration } from './sizing';
+import { defaultPhasePlan, recommendedDuration } from './sizing';
 
 /**
  * A realistic 10-designer workspace for demos and stress testing: ~44
@@ -144,18 +144,34 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
       // which keeps this quarter near (not far past) the team's capacity.
       const later = priority !== 'P0' && n++ % 5 >= 3;
       (later ? nextQuarter : projects).push({
-        id: makeId(), workspaceId: workspace.id, quarter: later ? quarter + 1 : quarter, backlogRank: null, name, ticket: `DSN-${ticket++}`, reference: '',
+        id: makeId(), workspaceId: workspace.id, quarter: later ? quarter + 1 : quarter, backlogRank: null, draft: null, name, ticket: `DSN-${ticket++}`, reference: '',
         workType, size, priority, epic: size === 'XL', pm: info.pm, em: info.em, goal: AREA_GOAL[area], gaTargetWeek: null, gaTargetText: '',
         productArea: area, notes: '', createdAt: Date.now(),
       });
     }
   }
 
-  const unscheduled: Project[] = UNSCHEDULED.map(([name, size, priority, workType, area], i) => ({
-    id: makeId(), workspaceId: workspace.id, quarter: null, backlogRank: i, name, ticket: '', reference: '',
-    workType, size, priority, epic: false, pm: AREAS[area].pm, em: AREAS[area].em, goal: AREA_GOAL[area], gaTargetWeek: null, gaTargetText: '',
-    productArea: area, notes: '', createdAt: Date.now(),
-  }));
+  // Unscheduled ideas carry a draft plan; the top two are already broken into phases and tasks.
+  const unscheduled: Project[] = UNSCHEDULED.map(([name, size, priority, workType, area], i) => {
+    const allocation = workType === 'Design' ? 50 : 20;
+    const duration = recommendedDuration(workType, size, allocation);
+    const key = `DSN-${ticket++}`;
+    return {
+      id: makeId(), workspaceId: workspace.id, quarter: null, backlogRank: i, name, ticket: key, reference: '',
+      workType, size, priority, epic: true, pm: AREAS[area].pm, em: AREAS[area].em, goal: AREA_GOAL[area], gaTargetWeek: null, gaTargetText: '',
+      productArea: area, notes: '', createdAt: Date.now(),
+      draft: {
+        designerId: i === 0 ? designers[0].id : null, pairDesignerId: null, phaseOverride: null, startWeek: 0, duration, allocation,
+        phasePlan: i < 2 ? defaultPhasePlan(config.phases, duration).map((p) => ({ ...p, ticket: `DSN-${ticket++}` })) : null,
+        curve: { shape: 'flat' }, confirmed: false,
+        milestones: i < 2 ? [
+          { id: makeId(), type: 'Concepts', offset: Math.floor(duration * 0.3), note: 'Review with PM', kind: 'deliver' },
+          { id: makeId(), type: 'Specs', offset: Math.floor(duration * 0.7), note: 'Eng sizing', kind: 'input' },
+          { id: makeId(), type: 'Handoff', offset: duration - 1, note: '', kind: 'deliver' },
+        ] : [],
+      },
+    };
+  });
 
   // --- Plan A: greedy, priority-first placement ---------------------------
   const PRI = { P0: 0, P1: 1, P2: 2, P3: 3 };
@@ -195,9 +211,9 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
     const milestones: Milestone[] =
       p.workType === 'Design' && duration >= 4
         ? [
-            { id: makeId(), type: 'Concepts', offset: Math.floor(duration * 0.3), note: '' },
-            { id: makeId(), type: 'Crit', offset: Math.floor(duration * 0.55), note: rand() > 0.6 ? 'With leadership' : '' },
-            { id: makeId(), type: 'Handoff', offset: duration - 1, note: '' },
+            { id: makeId(), type: 'Concepts', offset: Math.floor(duration * 0.3), note: '', kind: 'deliver' as const },
+            { id: makeId(), type: 'Crit', offset: Math.floor(duration * 0.55), note: rand() > 0.6 ? 'With leadership' : '', kind: 'input' as const },
+            { id: makeId(), type: 'Handoff', offset: duration - 1, note: '', kind: 'deliver' as const },
           ].slice(0, rand() > 0.3 ? 3 : 1)
         : [];
     schedulesA[p.id] = {
@@ -205,6 +221,7 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
       pairDesignerId: null,
       // Phases follow the schedule; a few are pinned by hand below.
       phaseOverride: null,
+      phasePlan: null,
       startWeek: assigned ? best.start : 0,
       duration,
       allocation,
@@ -231,6 +248,11 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
   if (reviewEarly) schedulesA[reviewEarly.id].phaseOverride = phases.find((x) => /approv/i.test(x)) ?? null;
   const stuck = scheduled.find((p) => p.priority === 'P1' && schedulesA[p.id].startWeek <= 2);
   if (stuck) schedulesA[stuck.id].phaseOverride = phases[0];
+  // The epics are planned phase by phase, each phase a task under the epic.
+  for (const p of projects.filter((x) => x.epic && schedulesA[x.id].designerId)) {
+    const s = schedulesA[p.id];
+    s.phasePlan = defaultPhasePlan(phases, s.duration).map((x) => ({ ...x, ticket: `DSN-${ticket++}` }));
+  }
   // One deliberately stretched designer, so the overload paths have something to show.
   const kai = d('Kai');
   const extra = projects.find((x) => schedulesA[x.id].designerId && schedulesA[x.id].designerId !== kai && x.priority === 'P2');
@@ -264,7 +286,7 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
   for (const p of nextQuarter) {
     const allocation = p.workType === 'Design' ? 40 : p.workType === 'Consult' ? 20 : 10;
     draft[p.id] = {
-      designerId: null, pairDesignerId: null, phaseOverride: null, startWeek: 0, allocation,
+      designerId: null, pairDesignerId: null, phaseOverride: null, phasePlan: null, startWeek: 0, allocation,
       duration: recommendedDuration(p.workType, p.size, allocation), curve: { shape: 'flat' }, confirmed: false, milestones: [],
     };
   }

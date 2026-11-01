@@ -1,22 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { currentPhase, phaseAt, recommendedDuration } from './sizing';
+import { currentPhase, defaultPhasePlan, fitPhasePlan, phaseAt, recommendedDuration } from './sizing';
 import { resample, weeklyAllocation } from './curves';
 import { computeLoad } from './capacity';
 import { balance } from './balancer';
 import { parseDelimited } from './csv';
 import { parseLooseDate, quarterForDate, quarterStartAbsWeek, quarterStartUtc, utcToAbsWeek } from './quarters';
-import { backlogOf, migrate, useStore } from '../store';
+import { backlogOf, migrate, patchSchedule, useStore } from '../store';
 import { buildDemo } from './demo';
 import { DESIGNER_COLORS } from './defaults';
 import { readableOn } from './motion';
 import type { Project, Schedule } from '../types';
 
 const project = (id: string, extra: Partial<Project> = {}): Project => ({
-  id, workspaceId: 'w', quarter: 2026 * 4, backlogRank: null, name: id, ticket: '', reference: '', workType: 'Design', size: 'M',
+  id, workspaceId: 'w', quarter: 2026 * 4, backlogRank: null, draft: null, name: id, ticket: '', reference: '', workType: 'Design', size: 'M',
   priority: 'P2', epic: false, pm: '', em: '', goal: '', gaTargetWeek: null, gaTargetText: '', productArea: '', notes: '', createdAt: 0, ...extra,
 });
 const sched = (extra: Partial<Schedule> = {}): Schedule => ({
-  designerId: null, pairDesignerId: null, phaseOverride: null, startWeek: 0, duration: 4, allocation: 50,
+  designerId: null, pairDesignerId: null, phaseOverride: null, phasePlan: null, startWeek: 0, duration: 4, allocation: 50,
   curve: { shape: 'flat' }, confirmed: false, milestones: [], ...extra,
 });
 
@@ -40,6 +40,30 @@ describe('phases', () => {
   it('lets a manual override win', () => {
     expect(currentPhase(phases, { duration: 10, phaseOverride: null }, 6)).toBe('Approve');
     expect(currentPhase(phases, { duration: 10, phaseOverride: 'Concepts' }, 6)).toBe('Concepts');
+  });
+});
+
+describe('phase plans', () => {
+  const phases = ['Discovery', 'Design', 'Handoff'];
+  const plan = [{ phase: 'Discovery', weeks: 2, ticket: 'D-1' }, { phase: 'Design', weeks: 6, ticket: 'D-2' }, { phase: 'Handoff', weeks: 2, ticket: '' }];
+  it('reads the current phase off a custom plan', () => {
+    expect(phaseAt(phases, 10, 1, plan)).toBe('Discovery');
+    expect(phaseAt(phases, 10, 2, plan)).toBe('Design');
+    expect(phaseAt(phases, 10, 8.5, plan)).toBe('Handoff');
+  });
+  it('defaults to whole weeks that add up to the duration', () => {
+    for (const d of [3, 7, 14, 20]) expect(defaultPhasePlan(['A', 'B', 'C', 'D', 'E', 'F'], d).reduce((a, p) => a + p.weeks, 0)).toBe(d);
+  });
+  it('stretches a plan to a new duration, keeping proportions', () => {
+    const out = fitPhasePlan(plan, 20);
+    expect(out.map((p) => p.weeks)).toEqual([4, 12, 4]);
+    expect(out[1].ticket).toBe('D-2');
+    expect(fitPhasePlan(plan, 4).reduce((a, p) => a + p.weeks, 0)).toBe(4);
+  });
+  it('keeps the phase plan and duration in step when patching a schedule', () => {
+    const base = { ...sched({ duration: 10 }), phasePlan: plan };
+    expect(patchSchedule(base, { phasePlan: [...plan, { phase: 'Build support', weeks: 3, ticket: '' }] }).duration).toBe(13);
+    expect(patchSchedule(base, { duration: 5 }).phasePlan!.reduce((a, p) => a + p.weeks, 0)).toBe(5);
   });
 });
 
@@ -257,6 +281,43 @@ describe('designer color migration', () => {
     };
     const ratio = (a: string, b: string) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
     for (const c of DESIGNER_COLORS) expect(ratio(c, readableOn(c))).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe('drafts and phase plan migration', () => {
+  it('adds phase plans, milestone kinds and backlog drafts (v8 → v9)', () => {
+    const v8 = {
+      version: 8, plans: [{ id: 'p', workspaceId: 'w', quarter: 2026 * 4, name: 'A', createdAt: 0, schedules: { a: { ...sched({ milestones: [{ id: 'm', type: 'Crit', offset: 1, note: '' }] as never }), phasePlan: undefined } } }],
+      workspaces: [{ id: 'w', name: 'W', designers: [], config: { teamType: 'product' } }],
+      projects: [{ ...project('a'), draft: undefined }, { ...project('b', { quarter: null, backlogRank: 0 }), draft: undefined }],
+    };
+    const s = migrate(v8 as never, 8);
+    expect(s.plans[0].schedules.a.phasePlan).toBeNull();
+    expect(s.plans[0].schedules.a.milestones[0].kind).toBe('deliver');
+    expect(s.projects[0].draft).toBeNull();
+    expect(s.projects[1].draft).toMatchObject({ designerId: null, phasePlan: null });
+  });
+
+  it('carries a draft plan into a quarter and back out again', () => {
+    const q = 2027 * 4;
+    const ws = { id: 'w', name: 'W', designers: [{ id: 'd', name: 'D', color: '#000' }], config: migrate({ workspaces: [{ id: 'w', name: 'W', designers: [] }] } as never, 9).workspaces[0].config };
+    useStore.setState({ workspaces: [ws], activeWorkspaceId: 'w', currentQuarter: q, projects: [], plans: [], activePlan: {} });
+    const st = useStore.getState();
+    const [id] = st.addToBacklog(['Epic']);
+    st.updateDraft(id, { designerId: 'd', phasePlan: [{ phase: 'Discovery', weeks: 3, ticket: 'T-1' }, { phase: 'Design', weeks: 5, ticket: 'T-2' }] });
+    expect(useStore.getState().projects[0].draft).toMatchObject({ designerId: 'd', duration: 8 });
+
+    st.moveToQuarter([id], q + 2);
+    let s = useStore.getState();
+    const plan = s.plans.find((p) => p.quarter === q + 2)!;
+    expect(plan.schedules[id]).toMatchObject({ designerId: 'd', duration: 8, confirmed: false });
+    expect(plan.schedules[id].phasePlan![1].ticket).toBe('T-2');
+    expect(s.projects[0].draft).toBeNull();
+
+    st.updateSchedule(id, { allocation: 70 }, plan.id);
+    st.moveToQuarter([id], null);
+    s = useStore.getState();
+    expect(s.projects[0].draft).toMatchObject({ designerId: 'd', allocation: 70, duration: 8 });
   });
 });
 

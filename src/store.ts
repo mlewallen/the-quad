@@ -5,14 +5,14 @@ import type {
 } from './types';
 import { DEFAULT_SETTINGS, DESIGNER_COLORS, RETIRED_DESIGNER_COLORS, defaultConfig } from './lib/defaults';
 import { currentQuarter, parseLooseDate, quarterStartUtc, utcToAbsWeek } from './lib/quarters';
-import { defaultAllocation, phaseAt, recommendedDuration, weeksIntoSchedule } from './lib/sizing';
+import { defaultAllocation, fitPhasePlan, phaseAt, recommendedDuration, weeksIntoSchedule } from './lib/sizing';
 import { celebrationTitle, type CelebrationId } from './lib/celebrations';
 import { buildDemo } from './lib/demo';
 import { currentDataKey } from './lib/session';
 
 /** The current account's storage key (see lib/session.ts). Read at call time; it changes on sign-in. */
 export const storageKey = () => useStore.persist.getOptions().name ?? currentDataKey();
-export const STATE_VERSION = 8;
+export const STATE_VERSION = 9;
 
 export const uid = () => crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 
@@ -84,6 +84,8 @@ interface Actions {
    * with null, out of every plan and onto the bottom of the unscheduled backlog.
    */
   moveToQuarter(ids: ID[], quarter: number | null): void;
+  /** Edit the plan of an unscheduled project (see Project.draft). */
+  updateDraft(projectId: ID, patch: Partial<Schedule>): void;
   /** Swap an unscheduled project with its neighbour in the backlog ranking. */
   moveInBacklog(id: ID, dir: -1 | 1): void;
   addDisruption(d: Omit<Disruption, 'id' | 'workspaceId'>): void;
@@ -122,6 +124,7 @@ export function defaultSchedule(_ws: Workspace | undefined, project: Pick<Projec
     designerId: null,
     pairDesignerId: null,
     phaseOverride: null,
+    phasePlan: null,
     startWeek: 0,
     duration: recommendedDuration(project.workType, project.size, allocation),
     allocation,
@@ -137,6 +140,7 @@ function blankProject(ws: Workspace, quarter: number | null, name: string): Proj
     workspaceId: ws.id,
     quarter,
     backlogRank: null,
+    draft: null,
     name,
     ticket: '',
     reference: '',
@@ -435,7 +439,7 @@ export const useStore = create<Store>()(
               plans: st.plans.map((p) => {
                 if (p.id !== pid) return p;
                 const schedules = { ...p.schedules };
-                for (const u of update) if (schedules[u.id] && Object.keys(u.schedule).length) schedules[u.id] = normalize({ ...schedules[u.id], ...u.schedule });
+                for (const u of update) if (schedules[u.id] && Object.keys(u.schedule).length) schedules[u.id] = patchSchedule(schedules[u.id], u.schedule);
                 return { ...p, schedules };
               }),
             }));
@@ -455,7 +459,7 @@ export const useStore = create<Store>()(
               mapPlan(pid, (p) => {
                 const cur = p.schedules[projectId];
                 if (!cur) return p;
-                return { ...p, schedules: { ...p.schedules, [projectId]: normalize({ ...cur, ...patch }) } };
+                return { ...p, schedules: { ...p.schedules, [projectId]: patchSchedule(cur, patch) } };
               }),
             patch.phaseOverride ? [projectId] : [],
           );
@@ -472,7 +476,7 @@ export const useStore = create<Store>()(
               () =>
                 mapPlan(pid, (p) => {
                   const schedules = { ...p.schedules };
-                  for (const id of ids) if (schedules[id]) schedules[id] = normalize({ ...schedules[id], ...schedulePatch });
+                  for (const id of ids) if (schedules[id]) schedules[id] = patchSchedule(schedules[id], schedulePatch);
                   return { ...p, schedules };
                 }),
               schedulePatch.phaseOverride ? ids : [],
@@ -496,7 +500,10 @@ export const useStore = create<Store>()(
           const w = ws();
           if (!w) return [];
           let rank = nextRank(w.id);
-          const created = names.map((n) => n.trim()).filter(Boolean).map((name) => ({ ...blankProject(w, null, name), backlogRank: rank++ }));
+          const created = names.map((n) => n.trim()).filter(Boolean).map((name) => {
+            const p = { ...blankProject(w, null, name), backlogRank: rank++ };
+            return { ...p, draft: defaultSchedule(w, p) };
+          });
           set((s) => ({ projects: [...s.projects, ...created] }));
           return created.map((p) => p.id);
         },
@@ -509,23 +516,41 @@ export const useStore = create<Store>()(
           const wsId = moving[0].workspaceId;
           const w = s.workspaces.find((x) => x.id === wsId);
           let rank = nextRank(wsId);
-          const moved = new Map(moving.map((p) => [p.id, { ...p, quarter, backlogRank: quarter == null ? rank++ : null }]));
+          // The plan travels with the project: its draft, or its schedule in the active plan
+          // of the quarter it's leaving. It needs confirming again wherever it lands.
+          const carried = new Map(moving.map((p) => {
+            const from = p.quarter == null ? p.draft : activePlanFor(s, wsId, p.quarter)?.schedules[p.id];
+            return [p.id, { ...(from ?? defaultSchedule(w, p)), confirmed: false }];
+          }));
+          const moved = new Map(moving.map((p) => [p.id, {
+            ...p, quarter, backlogRank: quarter == null ? rank++ : null, draft: quarter == null ? carried.get(p.id)! : null,
+          }]));
           let plans = s.plans.map((plan) => {
             const schedules = { ...plan.schedules };
             for (const p of moving) delete schedules[p.id];
             if (quarter != null && plan.workspaceId === wsId && plan.quarter === quarter)
-              for (const p of moving) schedules[p.id] = defaultSchedule(w, p);
+              for (const p of moving) schedules[p.id] = normalize(structuredClone(carried.get(p.id)!));
             return { ...plan, schedules };
           });
           let activePlan = s.activePlan;
           // A quarter nobody has planned yet gets its first plan.
           if (quarter != null && !plans.some((p) => p.workspaceId === wsId && p.quarter === quarter)) {
             const plan: Plan = { id: uid(), workspaceId: wsId, quarter, name: 'Plan A', createdAt: Date.now(), schedules: {} };
-            for (const p of moving) plan.schedules[p.id] = defaultSchedule(w, p);
+            for (const p of moving) plan.schedules[p.id] = normalize(structuredClone(carried.get(p.id)!));
             plans = [...plans, plan];
             activePlan = { ...activePlan, [planKey(wsId, quarter)]: plan.id };
           }
           set({ projects: s.projects.map((p) => moved.get(p.id) ?? p), plans, activePlan });
+        },
+
+        updateDraft(projectId, patch) {
+          set((s) => ({
+            projects: s.projects.map((p) => {
+              if (p.id !== projectId || p.quarter != null) return p;
+              const w = s.workspaces.find((x) => x.id === p.workspaceId);
+              return { ...p, draft: patchSchedule(p.draft ?? defaultSchedule(w, p), patch) };
+            }),
+          }));
         },
 
         moveInBacklog(id, dir) {
@@ -618,6 +643,23 @@ export const useStore = create<Store>()(
   ),
 );
 
+function activePlanFor(s: PersistedState, workspaceId: ID, quarter: number): Plan | undefined {
+  const plans = s.plans.filter((p) => p.workspaceId === workspaceId && p.quarter === quarter);
+  return plans.find((p) => p.id === s.activePlan[planKey(workspaceId, quarter)]) ?? plans[0];
+}
+
+/**
+ * Apply a schedule patch, keeping a custom phase plan and the duration in step:
+ * a new phase plan sets the duration to its total, and a new duration stretches
+ * the existing phase plan to fit.
+ */
+export function patchSchedule(cur: Schedule, patch: Partial<Schedule>): Schedule {
+  const next = { ...cur, ...patch };
+  if (patch.phasePlan) next.duration = Math.max(1, patch.phasePlan.reduce((a, p) => a + p.weeks, 0));
+  else if (patch.duration != null && next.phasePlan) next.phasePlan = fitPhasePlan(next.phasePlan, Math.max(1, Math.round(patch.duration)));
+  return normalize(next);
+}
+
 /** A workspace's unscheduled projects in backlog order. */
 export function backlogOf(projects: Project[], workspaceId: ID): Project[] {
   return projects
@@ -633,6 +675,8 @@ function normalize(s: Schedule): Schedule {
     allocation: Math.max(0, Math.min(100, Math.round(s.allocation))),
     pairDesignerId: s.pairDesignerId === s.designerId ? null : s.pairDesignerId,
     phaseOverride: s.phaseOverride || null,
+    phasePlan: s.phasePlan?.length ? s.phasePlan.map((p) => ({ phase: p.phase, weeks: Math.max(0, Math.round(p.weeks)), ticket: p.ticket ?? '' })) : null,
+    milestones: (s.milestones ?? []).map((m) => ({ ...m, kind: m.kind ?? 'deliver' })),
     confirmed: s.designerId ? s.confirmed : false,
   };
 }
@@ -739,6 +783,19 @@ export function migrate(raw: Partial<PersistedState>, version: number): Persiste
       ...w,
       designers: w.designers.map((d) => ({ ...d, color: RETIRED_DESIGNER_COLORS[d.color?.toLowerCase()] ?? d.color })),
     }));
+  }
+  // v9: schedules can carry a phase plan, milestones say whether the designer
+  // delivers or advises, and unscheduled projects keep a draft plan.
+  if (version < 9) {
+    state.plans = state.plans.map((plan) => ({
+      ...plan,
+      schedules: Object.fromEntries(Object.entries(plan.schedules).map(([id, s]) => [id, normalize({ ...s, phasePlan: s.phasePlan ?? null })])),
+    }));
+    state.projects = state.projects.map((p) => {
+      if (p.quarter != null) return { ...p, draft: null };
+      const w = state.workspaces.find((x) => x.id === p.workspaceId);
+      return { ...p, draft: p.draft ? normalize({ ...p.draft, phasePlan: p.draft.phasePlan ?? null }) : defaultSchedule(w, p) };
+    });
   }
   // Backfill unlocks that are provable from existing data (time unknown -> 0).
   state.unlocked = { ...(state.unlocked ?? {}) };
