@@ -217,7 +217,7 @@ function NextSteps({ r, load, entries, className }: { r: Readiness; load: Record
   if (unassigned.length) {
     steps.push({
       id: 'unassigned', tone: 'warn', icon: Inbox,
-      title: <>{unassigned.length} {(unassigned.length === 1 ? labels.initiative : labels.initiatives).toLowerCase()} need an owner</>,
+      title: <>{unassigned.length} {(unassigned.length === 1 ? labels.initiative : labels.initiatives).toLowerCase()} {unassigned.length === 1 ? 'needs' : 'need'} an owner</>,
       sub: unassigned.slice(0, 3).map((e) => e.project.name).join(', ') + (unassigned.length > 3 ? '…' : ''),
       actions: [{ label: 'Auto-balance', primary: true, icon: Wand2, run: () => navigate({ view: 'backlog', designer: null }) }],
     });
