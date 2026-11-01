@@ -386,7 +386,7 @@ function ReviewStep({ items, source, onBack, onDone }: { items: ExternalItem[]; 
                   </td>
                   <td>{r.project.priority ? <PriorityChip p={r.project.priority} /> : <span className="faint">–</span>}</td>
                   <td className="small">{r.project.size ?? <span className="faint">–</span>}</td>
-                  <td className="small">{r.schedule.phase ?? <span className="faint">–</span>}</td>
+                  <td className="small">{r.schedule.phaseOverride ?? <span className="faint">Auto</span>}</td>
                   <td className="small faint nowrap">
                     {r.schedule.startWeek !== undefined || r.schedule.duration ? formatWeekRange(qStart + (r.schedule.startWeek ?? 0), r.schedule.duration ?? 4) : '–'}
                   </td>

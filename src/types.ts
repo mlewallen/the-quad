@@ -97,7 +97,11 @@ export interface Curve {
 export interface Schedule {
   designerId: ID | null;
   pairDesignerId: ID | null;
-  phase: string;
+  /**
+   * Manually chosen phase. Null means the phase follows the schedule
+   * (see currentPhase in lib/sizing.ts).
+   */
+  phaseOverride: string | null;
   /** Week offset relative to the project's quarter start (may be negative or >12). */
   startWeek: number;
   duration: number;

@@ -5,14 +5,14 @@ import type {
 } from './types';
 import { DEFAULT_SETTINGS, DESIGNER_COLORS, defaultConfig } from './lib/defaults';
 import { currentQuarter } from './lib/quarters';
-import { defaultAllocation, recommendedDuration } from './lib/sizing';
+import { defaultAllocation, phaseAt, recommendedDuration, weeksIntoSchedule } from './lib/sizing';
 import { celebrationTitle, type CelebrationId } from './lib/celebrations';
 import { buildDemo } from './lib/demo';
 import { currentDataKey } from './lib/session';
 
 /** The current account's storage key (see lib/session.ts). Read at call time; it changes on sign-in. */
 export const storageKey = () => useStore.persist.getOptions().name ?? currentDataKey();
-export const STATE_VERSION = 4;
+export const STATE_VERSION = 5;
 
 export const uid = () => crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 
@@ -107,12 +107,12 @@ function initialState(): PersistedState {
   };
 }
 
-export function defaultSchedule(ws: Workspace | undefined, project: Pick<Project, 'workType' | 'size'>): Schedule {
+export function defaultSchedule(_ws: Workspace | undefined, project: Pick<Project, 'workType' | 'size'>): Schedule {
   const allocation = defaultAllocation(project.workType);
   return {
     designerId: null,
     pairDesignerId: null,
-    phase: ws?.config.phases[0] ?? '',
+    phaseOverride: null,
     startWeek: 0,
     duration: recommendedDuration(project.workType, project.size, allocation),
     allocation,
@@ -144,7 +144,7 @@ function blankProject(ws: Workspace, quarter: number, name: string): Project {
   };
 }
 
-const isApprove = (phase: string | undefined) => !!phase && /approv/i.test(phase);
+const isApprove = (phase: string | null | undefined) => !!phase && /approv/i.test(phase);
 
 function allConfirmed(plan: Plan | undefined): boolean {
   if (!plan) return false;
@@ -167,11 +167,11 @@ export const useStore = create<Store>()(
       const withScheduleCelebrations = (planId: ID | undefined, mutate: () => void, phaseTargets: ID[]) => {
         const before = get().plans.find((p) => p.id === planId);
         const wasAll = allConfirmed(before);
-        const prevPhases = phaseTargets.map((id) => before?.schedules[id]?.phase);
+        const prevPhases = phaseTargets.map((id) => before?.schedules[id]?.phaseOverride);
         mutate();
         const after = get().plans.find((p) => p.id === planId);
         if (!wasAll && allConfirmed(after)) get().celebrate('all-confirmed', `Every assignment in ${after!.name} is confirmed`);
-        else if (phaseTargets.some((id, i) => !isApprove(prevPhases[i]) && isApprove(after?.schedules[id]?.phase)))
+        else if (phaseTargets.some((id, i) => !isApprove(prevPhases[i]) && isApprove(after?.schedules[id]?.phaseOverride)))
           get().celebrate('approve', 'Moved to Approve — nice progress');
       };
 
@@ -446,7 +446,7 @@ export const useStore = create<Store>()(
                 if (!cur) return p;
                 return { ...p, schedules: { ...p.schedules, [projectId]: normalize({ ...cur, ...patch }) } };
               }),
-            patch.phase ? [projectId] : [],
+            patch.phaseOverride ? [projectId] : [],
           );
         },
 
@@ -464,7 +464,7 @@ export const useStore = create<Store>()(
                   for (const id of ids) if (schedules[id]) schedules[id] = normalize({ ...schedules[id], ...schedulePatch });
                   return { ...p, schedules };
                 }),
-              schedulePatch.phase ? ids : [],
+              schedulePatch.phaseOverride ? ids : [],
             );
           }
         },
@@ -558,6 +558,7 @@ function normalize(s: Schedule): Schedule {
     startWeek: Math.round(s.startWeek),
     allocation: Math.max(0, Math.min(100, Math.round(s.allocation))),
     pairDesignerId: s.pairDesignerId === s.designerId ? null : s.pairDesignerId,
+    phaseOverride: s.phaseOverride || null,
     confirmed: s.designerId ? s.confirmed : false,
   };
 }
@@ -584,7 +585,7 @@ export function migrate(raw: Partial<PersistedState>, version: number): Persiste
   if (version < 2 && (!raw.plans || !raw.plans.length)) {
     const plans = new Map<string, Plan>();
     const projects: Project[] = [];
-    for (const legacy of (raw.projects ?? []) as (Project & Partial<Schedule>)[]) {
+    for (const legacy of (raw.projects ?? []) as (Project & Partial<Schedule> & { phase?: string })[]) {
       const { designerId, pairDesignerId, phase, startWeek, duration, allocation, curve, confirmed, milestones, ...meta } = legacy;
       const w = state.workspaces.find((x) => x.id === meta.workspaceId);
       const project = { ...blankProject(w ?? state.workspaces[0], meta.quarter, meta.name), ...meta } as Project;
@@ -593,18 +594,18 @@ export function migrate(raw: Partial<PersistedState>, version: number): Persiste
       if (!plans.has(key))
         plans.set(key, { id: uid(), workspaceId: project.workspaceId, quarter: project.quarter, name: 'Plan A', createdAt: Date.now(), schedules: {} });
       const def = defaultSchedule(w, project);
-      plans.get(key)!.schedules[project.id] = normalize({
+      // The legacy phase rides along so the v5 step below decides whether to keep it.
+      plans.get(key)!.schedules[project.id] = Object.assign(normalize({
         ...def,
         designerId: designerId ?? null,
         pairDesignerId: pairDesignerId ?? null,
-        phase: phase ?? def.phase,
         startWeek: startWeek ?? def.startWeek,
         duration: duration ?? def.duration,
         allocation: allocation ?? def.allocation,
         curve: curve ?? def.curve,
         confirmed: !!confirmed,
         milestones: milestones ?? [],
-      });
+      }), { phase });
     }
     state.projects = projects;
     state.plans = [...plans.values()];
@@ -620,6 +621,26 @@ export function migrate(raw: Partial<PersistedState>, version: number): Persiste
       if (l.initiative === 'Initiative') l.initiative = 'Project';
       if (l.initiatives === 'Initiatives') l.initiatives = 'Projects';
       return { ...w, config: { ...w.config, labels: l } };
+    });
+  }
+  // v5: phases follow the schedule. A stored phase is kept as a manual override
+  // only if someone moved it off the default first phase and it disagrees with
+  // where the schedule says the project is today; otherwise it goes stale.
+  if (version < 5) {
+    const now = Date.now();
+    const sm = state.settings.fiscalStartMonth;
+    const projectById = new Map(state.projects.map((p) => [p.id, p]));
+    state.plans = state.plans.map((plan) => {
+      const phases = state.workspaces.find((w) => w.id === plan.workspaceId)?.config.phases ?? [];
+      const schedules: Record<ID, Schedule> = {};
+      for (const [id, raw] of Object.entries(plan.schedules)) {
+        const { phase, ...rest } = raw as Schedule & { phase?: string };
+        const project = projectById.get(id) ?? { quarter: plan.quarter };
+        const derived = phaseAt(phases, rest.duration, weeksIntoSchedule(project, rest, sm, now));
+        const keep = rest.phaseOverride ?? (phase && phase !== phases[0] && phase !== derived ? phase : null);
+        schedules[id] = { ...rest, phaseOverride: keep };
+      }
+      return { ...plan, schedules };
     });
   }
   // Backfill unlocks that are provable from existing data (time unknown -> 0).

@@ -1,7 +1,7 @@
 import { motion } from 'motion/react';
 import { Users } from 'lucide-react';
 import { useStore } from '../store';
-import { openDesigner, openProject, useDesigners, useEntries, useLoad, useQuarterStart } from '../hooks';
+import { openDesigner, openProject, useDesigners, useEntries, useLoad, usePhase, useQuarterStart } from '../hooks';
 import { summarize } from '../lib/capacity';
 import { formatAbsWeek, formatWeekRange } from '../lib/quarters';
 import { staggerChild, staggerParent } from '../lib/motion';
@@ -14,6 +14,7 @@ export default function Team() {
   const { load, fromAbs } = useLoad();
   const qStart = useQuarterStart();
   const updateSchedule = useStore((s) => s.updateSchedule);
+  const phaseOf = usePhase();
 
   if (!designers.length) return <div className="view"><EmptyState icon={Users} title="No designers yet">Add designers in Settings → Team.</EmptyState></div>;
 
@@ -72,7 +73,7 @@ export default function Team() {
                         />
                       )}
                       <span className="tiny faint">
-                        {e.schedule.phase} · {formatWeekRange(qStart + e.schedule.startWeek, e.schedule.duration)}
+                        {phaseOf(e)} · {formatWeekRange(qStart + e.schedule.startWeek, e.schedule.duration)}
                         {pairing ? ` · pairing at ${Math.round(e.schedule.allocation / 2)}%` : ''}
                         {e.schedule.confirmed ? '' : ' · tentative'}
                       </span>

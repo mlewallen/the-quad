@@ -1,10 +1,10 @@
 import { useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowDown, ArrowUp, Check, Inbox, Search, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, Inbox, Pin, Search, Trash2, X } from 'lucide-react';
 import { confirmDialog, toast } from '../feedback';
 import { spring } from '../lib/motion';
 import { useStore } from '../store';
-import { openProject, useDesignerMap, useDesigners, useQuarterStart, useWorkspace } from '../hooks';
+import { openProject, useDesignerMap, useDesigners, usePhase, useQuarterStart, useWorkspace } from '../hooks';
 import type { Entry } from '../lib/capacity';
 import type { ID } from '../types';
 import { PRIORITIES, SIZES } from '../types';
@@ -25,6 +25,7 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
   const designers = useDesigners();
   const dmap = useDesignerMap();
   const qStart = useQuarterStart();
+  const phaseOf = usePhase();
   const labels = workspace.config.labels;
   const cols = variant === 'full' ? FULL : COMPACT;
 
@@ -42,7 +43,7 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
     const filtered = entries.filter(({ project: p, schedule: s }) => {
       if (ql && !`${p.name} ${p.ticket} ${p.productArea} ${p.pm} ${p.em}`.toLowerCase().includes(ql)) return false;
       if (fDesigner === '__none' ? s.designerId : fDesigner && s.designerId !== fDesigner && s.pairDesignerId !== fDesigner) return false;
-      if (fPhase && s.phase !== fPhase) return false;
+      if (fPhase && phaseOf({ project: p, schedule: s }) !== fPhase) return false;
       if (fPriority && p.priority !== fPriority) return false;
       if (fStatus === 'confirmed' && !s.confirmed) return false;
       if (fStatus === 'tentative' && s.confirmed) return false;
@@ -52,7 +53,7 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
       const { project: p, schedule: s } = e;
       switch (sort.key) {
         case 'designer': return s.designerId ? dmap[s.designerId]?.name ?? '' : '￿';
-        case 'phase': return workspace.config.phases.indexOf(s.phase);
+        case 'phase': return workspace.config.phases.indexOf(phaseOf(e));
         case 'priority': return PRI_ORDER[p.priority];
         case 'size': return SIZE_ORDER[p.size];
         case 'start': return s.startWeek;
@@ -67,7 +68,7 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
       const c = va < vb ? -1 : va > vb ? 1 : a.project.name.localeCompare(b.project.name);
       return c * sort.dir;
     });
-  }, [entries, query, fDesigner, fPhase, fPriority, fStatus, sort, dmap, workspace.config.phases]);
+  }, [entries, query, fDesigner, fPhase, fPriority, fStatus, sort, dmap, workspace.config.phases, phaseOf]);
 
   const visibleIds = rows.map((r) => r.project.id);
   const selIds = visibleIds.filter((id) => selected.has(id));
@@ -166,7 +167,12 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
                     <span className="ellipsis small">{d?.name ?? <span className="faint">Unassigned</span>}</span>
                   </div>
                 ),
-                phase: <span className="small">{s.phase}</span>,
+                phase: (
+                  <span className="small row" style={{ gap: 4 }}>
+                    {phaseOf({ project: p, schedule: s })}
+                    {s.phaseOverride && <Pin size={11} className="faint" aria-label="set manually" />}
+                  </span>
+                ),
                 priority: <PriorityChip p={p.priority} />,
                 size: p.size,
                 workType: <span className="small">{p.workType}</span>,
@@ -220,8 +226,9 @@ function BulkBar({ ids, onDone }: { ids: ID[]; onDone: () => void }) {
         <option value="__none">Unassign</option>
         {designers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
       </select>
-      <select className="select sm" style={{ width: 'auto' }} defaultValue="" onChange={pick((v) => bulk(ids, {}, { phase: v }))}>
+      <select className="select sm" style={{ width: 'auto' }} defaultValue="" onChange={pick((v) => bulk(ids, {}, { phaseOverride: v === '__auto' ? null : v }))}>
         <option value="" disabled>Phase…</option>
+        <option value="__auto">Follow schedule</option>
         {workspace.config.phases.map((p) => <option key={p}>{p}</option>)}
       </select>
       <select className="select sm" style={{ width: 'auto' }} defaultValue="" onChange={pick((v) => bulk(ids, { priority: v as never }, {}))}>

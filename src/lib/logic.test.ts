@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { recommendedDuration } from './sizing';
+import { currentPhase, phaseAt, recommendedDuration } from './sizing';
 import { resample, weeklyAllocation } from './curves';
 import { computeLoad } from './capacity';
 import { balance } from './balancer';
 import { parseDelimited } from './csv';
-import { quarterForDate, quarterStartAbsWeek, quarterStartUtc } from './quarters';
+import { quarterForDate, quarterStartAbsWeek, quarterStartUtc, utcToAbsWeek } from './quarters';
 import { migrate } from '../store';
 import { buildDemo } from './demo';
 import type { Project, Schedule } from '../types';
@@ -14,13 +14,30 @@ const project = (id: string, extra: Partial<Project> = {}): Project => ({
   priority: 'P2', epic: false, pm: '', em: '', goal: '', gaTarget: '', productArea: '', notes: '', createdAt: 0, ...extra,
 });
 const sched = (extra: Partial<Schedule> = {}): Schedule => ({
-  designerId: null, pairDesignerId: null, phase: 'Design', startWeek: 0, duration: 4, allocation: 50,
+  designerId: null, pairDesignerId: null, phaseOverride: null, startWeek: 0, duration: 4, allocation: 50,
   curve: { shape: 'flat' }, confirmed: false, milestones: [], ...extra,
 });
 
 describe('sizing', () => {
   it('Large Design at 50% is ~14 calendar weeks', () => {
     expect(recommendedDuration('Design', 'L', 50)).toBe(14);
+  });
+});
+
+describe('phases', () => {
+  const phases = ['Discovery', 'Concepts', 'Design', 'Approve', 'Handoff', 'Build support'];
+  it('follows the schedule through the phase breakdown', () => {
+    expect(phaseAt(phases, 10, -2)).toBe('Discovery');
+    expect(phaseAt(phases, 10, 0)).toBe('Discovery');
+    expect(phaseAt(phases, 10, 4)).toBe('Design');
+    expect(phaseAt(phases, 10, 6)).toBe('Approve');
+    expect(phaseAt(phases, 10, 9.9)).toBe('Build support');
+    expect(phaseAt(phases, 10, 30)).toBe('Build support');
+    expect(phaseAt([], 10, 3)).toBe('');
+  });
+  it('lets a manual override win', () => {
+    expect(currentPhase(phases, { duration: 10, phaseOverride: null }, 6)).toBe('Approve');
+    expect(currentPhase(phases, { duration: 10, phaseOverride: 'Concepts' }, 6)).toBe('Concepts');
   });
 });
 
@@ -123,6 +140,28 @@ describe('terminology migration', () => {
   });
 });
 
+describe('phase migration', () => {
+  it('drops stale default phases and keeps deliberate ones as overrides (v4 → v5)', () => {
+    const q = quarterForDate(Date.now(), 1);
+    // Started eight weeks ago and twenty weeks long, so the schedule says Design.
+    const startWeek = utcToAbsWeek(Date.now()) - quarterStartAbsWeek(q, 1) - 8;
+    const legacy = (phase: string) => ({ ...sched({ startWeek, duration: 20 }), phaseOverride: undefined, phase });
+    const v4 = {
+      version: 4,
+      settings: { fiscalStartMonth: 1 },
+      workspaces: [{ id: 'w', name: 'W', designers: [], config: { teamType: 'product' } }],
+      projects: [project('a', { quarter: q }), project('b', { quarter: q }), project('c', { quarter: q })],
+      plans: [{ id: 'p', workspaceId: 'w', quarter: q, name: 'Plan A', createdAt: 0, schedules: { a: legacy('Discovery'), b: legacy('Concepts'), c: legacy('Design') } }],
+    };
+    const s = migrate(v4 as never, 4);
+    const out = s.plans[0].schedules;
+    expect(out.a.phaseOverride).toBeNull(); // the untouched default now follows the schedule
+    expect(out.b.phaseOverride).toBe('Concepts'); // set by hand and disagrees with the schedule
+    expect(out.c.phaseOverride).toBeNull(); // matches the schedule anyway
+    expect('phase' in out.a).toBe(false);
+  });
+});
+
 describe('demo data', () => {
   it('builds a 10-designer workspace with two plans and some unassigned work', () => {
     let n = 0;
@@ -145,5 +184,7 @@ describe('demo data', () => {
     expect(a.filter((s) => !s.designerId).length).toBeGreaterThan(0);
     expect(a.filter((s) => s.confirmed).length).toBeGreaterThan(10);
     expect(demo.disruptions.length).toBeGreaterThan(5);
+    // Phases mostly follow the schedule, with a couple pinned by hand.
+    expect(a.filter((s) => s.phaseOverride).length).toBe(2);
   });
 });

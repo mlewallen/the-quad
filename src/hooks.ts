@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { planKey, useStore } from './store';
 import type { Designer, ID, Plan, Project, Schedule } from './types';
 import { WEEKS_PER_QUARTER } from './types';
 import { computeLoad, type Entry, type WeekLoad } from './lib/capacity';
 import { quarterStartAbsWeek } from './lib/quarters';
+import { currentPhase, weeksIntoSchedule } from './lib/sizing';
 
 export function useWorkspace() {
   const workspaces = useStore((s) => s.workspaces);
@@ -99,6 +100,16 @@ export function useWorkspaceDisruptions() {
   const all = useStore((s) => s.disruptions);
   const ws = useStore((s) => s.activeWorkspaceId);
   return useMemo(() => all.filter((d) => d.workspaceId === ws), [all, ws]);
+}
+
+/**
+ * Resolves each entry's current phase: its manual override, or where today
+ * falls in the schedule's phase breakdown.
+ */
+export function usePhase(): (e: { project: Project; schedule: Schedule }) => string {
+  const phases = useWorkspace()?.config.phases ?? EMPTY;
+  const sm = useStore((s) => s.settings.fiscalStartMonth);
+  return useCallback((e) => currentPhase(phases, e.schedule, weeksIntoSchedule(e.project, e.schedule, sm)), [phases, sm]);
 }
 
 /** Per-designer weekly load over a window relative to the quarter start. */

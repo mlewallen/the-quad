@@ -177,7 +177,6 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
       weekly.forEach((v, i) => (load[best.designer][best.start + i] += v));
     }
     const assigned = !unassigned.has(p.id);
-    const progress = assigned ? Math.min(1, Math.max(0, (1 - best.start / WEEKS_PER_QUARTER) * rand() * 0.8)) : 0;
     const milestones: Milestone[] =
       p.workType === 'Design' && duration >= 4
         ? [
@@ -189,7 +188,8 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
     schedulesA[p.id] = {
       designerId: assigned ? best.designer : null,
       pairDesignerId: null,
-      phase: phases[Math.min(phases.length - 2, Math.floor(progress * (phases.length - 1)))],
+      // Phases follow the schedule; a few are pinned by hand below.
+      phaseOverride: null,
       startWeek: assigned ? best.start : 0,
       duration,
       allocation,
@@ -209,6 +209,13 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
     s.pairDesignerId = pair.id;
     weekly.forEach((v, i) => (load[pair.id][s.startWeek + i] += v));
   }
+  // Manual phase overrides: one P0 already in review ahead of schedule, one
+  // waiting on research that the schedule says should be done.
+  const scheduled = order.filter((p) => schedulesA[p.id].designerId && p.workType === 'Design');
+  const reviewEarly = scheduled.find((p) => p.priority === 'P0');
+  if (reviewEarly) schedulesA[reviewEarly.id].phaseOverride = phases.find((x) => /approv/i.test(x)) ?? null;
+  const stuck = scheduled.find((p) => p.priority === 'P1' && schedulesA[p.id].startWeek <= 2);
+  if (stuck) schedulesA[stuck.id].phaseOverride = phases[0];
   // One deliberately stretched designer, so the overload paths have something to show.
   const kai = d('Kai');
   const extra = projects.find((x) => schedulesA[x.id].designerId && schedulesA[x.id].designerId !== kai && x.priority === 'P2');
@@ -232,7 +239,7 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
   for (const p of nextQuarter) {
     const allocation = p.workType === 'Design' ? 40 : p.workType === 'Consult' ? 20 : 10;
     draft[p.id] = {
-      designerId: null, pairDesignerId: null, phase: phases[0], startWeek: 0, allocation,
+      designerId: null, pairDesignerId: null, phaseOverride: null, startWeek: 0, allocation,
       duration: recommendedDuration(p.workType, p.size, allocation), curve: { shape: 'flat' }, confirmed: false, milestones: [],
     };
   }

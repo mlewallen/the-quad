@@ -12,7 +12,7 @@ import { computeLoad, loadLevel } from '../lib/capacity';
 import { effortWeeks, weeklyAllocation } from '../lib/curves';
 import { formatAbsWeek, formatWeekRange } from '../lib/quarters';
 import { WeekPicker } from './WeekPicker';
-import { effortFor, phaseBreakdown, recommendedDurationForCurve } from '../lib/sizing';
+import { effortFor, phaseAt, phaseBreakdown, recommendedDurationForCurve, weeksIntoSchedule } from '../lib/sizing';
 import CurveEditor from './CurveEditor';
 import { DesignerSelect, Field, Section, Slider, TextInput } from './ui';
 
@@ -60,6 +60,8 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
   const recommended = recommendedDurationForCurve(p.workType, p.size, s.allocation, s.curve);
   const delta = s.duration - recommended;
   const phases = phaseBreakdown(workspace.config.phases, s.duration);
+  const autoPhase = phaseAt(workspace.config.phases, s.duration, weeksIntoSchedule(p, s, sm));
+  const phase = s.phaseOverride || autoPhase;
   const thisWeekly = weeklyAllocation(s.curve, s.duration, s.allocation);
   const overWeeks = designerLoad?.filter((w) => w.total > 100.5).length ?? 0;
 
@@ -144,10 +146,16 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
           <Section title="Status">
             <div className="grid3">
               <Field label="Phase">
-                <select className="select" value={s.phase} onChange={(e) => us({ phase: e.target.value })}>
-                  {!workspace.config.phases.includes(s.phase) && <option>{s.phase}</option>}
+                <select className="select" value={s.phaseOverride ?? ''} onChange={(e) => us({ phaseOverride: e.target.value || null })} aria-describedby="phase-hint">
+                  <option value="">Auto · {autoPhase}</option>
+                  {s.phaseOverride && !workspace.config.phases.includes(s.phaseOverride) && <option>{s.phaseOverride}</option>}
                   {workspace.config.phases.map((x) => <option key={x}>{x}</option>)}
                 </select>
+                <span id="phase-hint" className="tiny faint">
+                  {s.phaseOverride ? (
+                    <>Set manually. <button className="link-btn" style={{ color: 'var(--accent)' }} onClick={() => us({ phaseOverride: null })}>Follow the schedule</button></>
+                  ) : 'Follows the schedule'}
+                </span>
               </Field>
               <Field label="Priority">
                 <select className="select" value={p.priority} onChange={(e) => up({ priority: e.target.value as Project['priority'] })}>
@@ -258,9 +266,9 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
                     key={ph.phase}
                     style={{
                       width: `${(ph.weeks / s.duration) * 100}%`,
-                      background: ph.phase === s.phase ? designer?.color ?? '#8a8a94' : 'var(--surface-3)',
-                      color: ph.phase === s.phase ? readableOn(designer?.color ?? '#8a8a94') : 'var(--text-2)',
-                      opacity: ph.phase === s.phase ? 1 : 0.6 + (i / phases.length) * 0.4,
+                      background: ph.phase === phase ? designer?.color ?? '#8a8a94' : 'var(--surface-3)',
+                      color: ph.phase === phase ? readableOn(designer?.color ?? '#8a8a94') : 'var(--text-2)',
+                      opacity: ph.phase === phase ? 1 : 0.6 + (i / phases.length) * 0.4,
                     }}
                     title={`${ph.phase}: ~${ph.weeks.toFixed(1)} wks`}
                   >
