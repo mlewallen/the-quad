@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { CalendarRange, Diamond, Maximize2, PanelRight, Plus, SquareStack, Trash2, WandSparkles, X } from 'lucide-react';
+import { AlertTriangle, CalendarRange, Diamond, Maximize2, PanelRight, Plus, SquareStack, Trash2, WandSparkles, X } from 'lucide-react';
 import { confirmDialog, toast } from '../feedback';
 import { readableOn } from '../lib/motion';
 import { uid, useStore } from '../store';
@@ -12,7 +12,7 @@ import { computeLoad, loadLevel } from '../lib/capacity';
 import { effortWeeks, weeklyAllocation } from '../lib/curves';
 import { formatAbsWeek, formatWeekRange } from '../lib/quarters';
 import { WeekPicker } from './WeekPicker';
-import { effortFor, phaseAt, phaseBreakdown, recommendedDurationForCurve, weeksIntoSchedule } from '../lib/sizing';
+import { effortFor, gaSlipWeeks, phaseAt, phaseBreakdown, recommendedDurationForCurve, weeksIntoSchedule } from '../lib/sizing';
 import CurveEditor from './CurveEditor';
 import { DesignerSelect, Field, Section, Slider, TextInput } from './ui';
 
@@ -62,6 +62,7 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
   const phases = phaseBreakdown(workspace.config.phases, s.duration);
   const autoPhase = phaseAt(workspace.config.phases, s.duration, weeksIntoSchedule(p, s, sm));
   const phase = s.phaseOverride || autoPhase;
+  const slip = gaSlipWeeks(p, s, sm);
   const thisWeekly = weeklyAllocation(s.curve, s.duration, s.allocation);
   const overWeeks = designerLoad?.filter((w) => w.total > 100.5).length ?? 0;
 
@@ -294,7 +295,25 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
           <Section title="Context & Partners">
             <div className="grid2">
               <Field label={labels.goal}><TextInput value={p.goal} onCommit={(v) => up({ goal: v })} /></Field>
-              <Field label={labels.gaTarget}><TextInput value={p.gaTarget} onCommit={(v) => up({ gaTarget: v })} placeholder="e.g. Mar 15" /></Field>
+              <Field label={labels.gaTarget}>
+                <div className="row" style={{ gap: 4 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <WeekPicker
+                      value={p.gaTargetWeek ?? qStart + s.startWeek + s.duration}
+                      label={p.gaTargetWeek == null ? 'Not set' : `Week of ${formatAbsWeek(p.gaTargetWeek, true)}`}
+                      onChange={(w) => up({ gaTargetWeek: w, gaTargetText: '' })}
+                      ariaLabel={labels.gaTarget}
+                    />
+                  </div>
+                  {p.gaTargetWeek != null && (
+                    <button className="btn icon ghost sm" aria-label={`Clear ${labels.gaTarget}`} onClick={() => up({ gaTargetWeek: null })}><X size={14} /></button>
+                  )}
+                </div>
+                {p.gaTargetText && p.gaTargetWeek == null && <span className="tiny faint">Previously noted as “{p.gaTargetText}”</span>}
+                {slip != null && slip > 0 && (
+                  <span className="tiny" style={{ color: 'var(--over)' }}><AlertTriangle size={11} style={{ verticalAlign: -1 }} /> Design ends {slip} wk{slip > 1 ? 's' : ''} after {labels.gaTarget}</span>
+                )}
+              </Field>
               <Field label={labels.productArea}><TextInput value={p.productArea} onCommit={(v) => up({ productArea: v })} /></Field>
               <div />
               <Field label={labels.pm}><TextInput value={p.pm} onCommit={(v) => up({ pm: v })} /></Field>

@@ -136,7 +136,7 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
       const later = priority !== 'P0' && n++ % 5 >= 3;
       (later ? nextQuarter : projects).push({
         id: makeId(), workspaceId: workspace.id, quarter: later ? quarter + 1 : quarter, name, ticket: `DSN-${ticket++}`, reference: '',
-        workType, size, priority, epic: size === 'XL', pm: info.pm, em: info.em, goal: AREA_GOAL[area], gaTarget: '',
+        workType, size, priority, epic: size === 'XL', pm: info.pm, em: info.em, goal: AREA_GOAL[area], gaTargetWeek: null, gaTargetText: '',
         productArea: area, notes: '', createdAt: Date.now(),
       });
     }
@@ -220,6 +220,16 @@ export function buildDemo(quarter: number, startMonth: number, makeId: () => str
   const kai = d('Kai');
   const extra = projects.find((x) => schedulesA[x.id].designerId && schedulesA[x.id].designerId !== kai && x.priority === 'P2');
   if (extra) schedulesA[extra.id] = { ...schedulesA[extra.id], designerId: kai, startWeek: 2, confirmed: false };
+
+  // GA targets: most P0/P1 work launches a few weeks after design wraps; one is
+  // squeezed so design runs past GA, and one still has a free-text note.
+  const launches = projects.filter((p) => p.priority !== 'P2' && p.priority !== 'P3' && schedulesA[p.id].designerId);
+  launches.forEach((p, i) => {
+    const s = schedulesA[p.id];
+    p.gaTargetWeek = qStart + s.startWeek + s.duration - 1 + (i === 1 ? -2 : 2 + (i % 3));
+  });
+  const noted = projects.find((p) => p.priority === 'P2' && p.gaTargetWeek == null);
+  if (noted) noted.gaTargetText = 'After the pricing review';
 
   // --- Plan B: same work, a different staffing bet ------------------------
   const schedulesB: Record<string, Schedule> = structuredClone(schedulesA);

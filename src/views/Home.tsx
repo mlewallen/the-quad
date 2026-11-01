@@ -14,6 +14,7 @@ import type { Designer, Plan } from '../types';
 import { WEEKS_PER_QUARTER } from '../types';
 import { computeLoad, loadLevel, summarize, type Entry, type WeekLoad } from '../lib/capacity';
 import { formatAbsWeek, quarterLabel, utcToAbsWeek } from '../lib/quarters';
+import { gaSlipWeeks } from '../lib/sizing';
 import { ease, spring, staggerChild, staggerParent } from '../lib/motion';
 import { Avatar, LoadChip } from '../components/ui';
 
@@ -256,6 +257,16 @@ function NextSteps({ r, load, entries, className }: { r: Readiness; load: Record
         },
         { label: 'Review', run: () => navigate({ view: 'projects', designer: null }) },
       ],
+    });
+  }
+  const sm = useStore((s) => s.settings.fiscalStartMonth);
+  const late = entries.filter((e) => (gaSlipWeeks(e.project, e.schedule, sm) ?? 0) > 0);
+  if (late.length) {
+    steps.push({
+      id: 'late', tone: 'warn', icon: CalendarClock,
+      title: <>{late.length} {(late.length === 1 ? labels.initiative : labels.initiatives).toLowerCase()} {late.length === 1 ? 'ends' : 'end'} after {labels.gaTarget}</>,
+      sub: late.slice(0, 3).map((e) => e.project.name).join(', ') + (late.length > 3 ? '…' : ''),
+      actions: [{ label: 'Review', primary: true, run: () => openProject(late[0].project.id) }],
     });
   }
   const noMilestones = entries.filter((e) => e.schedule.designerId && e.project.workType === 'Design' && e.schedule.duration >= 4 && !e.schedule.milestones.length);

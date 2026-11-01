@@ -4,14 +4,14 @@ import { resample, weeklyAllocation } from './curves';
 import { computeLoad } from './capacity';
 import { balance } from './balancer';
 import { parseDelimited } from './csv';
-import { quarterForDate, quarterStartAbsWeek, quarterStartUtc, utcToAbsWeek } from './quarters';
+import { parseLooseDate, quarterForDate, quarterStartAbsWeek, quarterStartUtc, utcToAbsWeek } from './quarters';
 import { migrate } from '../store';
 import { buildDemo } from './demo';
 import type { Project, Schedule } from '../types';
 
 const project = (id: string, extra: Partial<Project> = {}): Project => ({
   id, workspaceId: 'w', quarter: 2026 * 4, name: id, ticket: '', reference: '', workType: 'Design', size: 'M',
-  priority: 'P2', epic: false, pm: '', em: '', goal: '', gaTarget: '', productArea: '', notes: '', createdAt: 0, ...extra,
+  priority: 'P2', epic: false, pm: '', em: '', goal: '', gaTargetWeek: null, gaTargetText: '', productArea: '', notes: '', createdAt: 0, ...extra,
 });
 const sched = (extra: Partial<Schedule> = {}): Schedule => ({
   designerId: null, pairDesignerId: null, phaseOverride: null, startWeek: 0, duration: 4, allocation: 50,
@@ -63,6 +63,22 @@ describe('quarters', () => {
   });
   it('quarterForDate round-trips quarter starts', () => {
     for (const sm of [0, 1, 6]) for (let q = 2026 * 4; q < 2028 * 4; q++) expect(quarterForDate(quarterStartUtc(q, sm) + 86400000, sm)).toBe(q);
+  });
+});
+
+describe('loose dates', () => {
+  const ref = Date.UTC(2026, 10, 2); // Nov 2, 2026
+  it('parses common hand-typed formats', () => {
+    expect(parseLooseDate('2027-03-15', ref)).toBe(Date.UTC(2027, 2, 15));
+    expect(parseLooseDate('Mar 15', ref)).toBe(Date.UTC(2027, 2, 15)); // no year: next one after the reference
+    expect(parseLooseDate('Dec 1st', ref)).toBe(Date.UTC(2026, 11, 1));
+    expect(parseLooseDate('15 March 2027', ref)).toBe(Date.UTC(2027, 2, 15));
+    expect(parseLooseDate('September 30, 2026', ref)).toBe(Date.UTC(2026, 8, 30));
+    expect(parseLooseDate('3/15/27', ref)).toBe(Date.UTC(2027, 2, 15));
+    expect(parseLooseDate('Jan 2027', ref)).toBe(Date.UTC(2027, 0, 1));
+  });
+  it('rejects text that is not a date', () => {
+    for (const t of ['', 'TBD', 'after Q2 launch', 'Feb 30', '13/45', 'end of quarter']) expect(parseLooseDate(t, ref)).toBeNull();
   });
 });
 
@@ -162,6 +178,29 @@ describe('phase migration', () => {
   });
 });
 
+describe('GA target migration', () => {
+  it('turns parseable GA text into a week and keeps the rest as text (v5 → v6)', () => {
+    const q = 2027 * 4; // FY27 Q1 with a February start begins in Feb 2026
+    const v5 = {
+      version: 5,
+      settings: { fiscalStartMonth: 1 },
+      workspaces: [{ id: 'w', name: 'W', designers: [], config: { teamType: 'product' } }],
+      projects: [
+        { ...project('a', { quarter: q }), gaTargetWeek: undefined, gaTargetText: undefined, gaTarget: 'Mar 16' },
+        { ...project('b', { quarter: q }), gaTargetWeek: undefined, gaTargetText: undefined, gaTarget: 'after the pricing review' },
+        { ...project('c', { quarter: q }), gaTargetWeek: undefined, gaTargetText: undefined, gaTarget: '' },
+      ],
+      plans: [],
+    };
+    const [a, b, c] = migrate(v5 as never, 5).projects;
+    expect(a.gaTargetWeek).toBe(utcToAbsWeek(Date.UTC(2026, 2, 16)));
+    expect(a.gaTargetText).toBe('');
+    expect(b).toMatchObject({ gaTargetWeek: null, gaTargetText: 'after the pricing review' });
+    expect(c).toMatchObject({ gaTargetWeek: null, gaTargetText: '' });
+    expect('gaTarget' in a).toBe(false);
+  });
+});
+
 describe('demo data', () => {
   it('builds a 10-designer workspace with two plans and some unassigned work', () => {
     let n = 0;
@@ -186,5 +225,9 @@ describe('demo data', () => {
     expect(demo.disruptions.length).toBeGreaterThan(5);
     // Phases mostly follow the schedule, with a couple pinned by hand.
     expect(a.filter((s) => s.phaseOverride).length).toBe(2);
+    // Some launches have GA dates, and at least one design schedule runs past its GA.
+    const thisQ = demo.projects.filter((p) => p.quarter === q);
+    expect(thisQ.filter((p) => p.gaTargetWeek != null).length).toBeGreaterThan(5);
+    expect(thisQ.some((p) => p.gaTargetWeek != null && qs + demo.plans[0].schedules[p.id].startWeek + demo.plans[0].schedules[p.id].duration - 1 > p.gaTargetWeek)).toBe(true);
   });
 });

@@ -4,7 +4,7 @@ import type {
   Designer, Disruption, ID, PersistedState, Plan, Project, Schedule, Settings, Size, TeamType, Workspace,
 } from './types';
 import { DEFAULT_SETTINGS, DESIGNER_COLORS, defaultConfig } from './lib/defaults';
-import { currentQuarter } from './lib/quarters';
+import { currentQuarter, parseLooseDate, quarterStartUtc, utcToAbsWeek } from './lib/quarters';
 import { defaultAllocation, phaseAt, recommendedDuration, weeksIntoSchedule } from './lib/sizing';
 import { celebrationTitle, type CelebrationId } from './lib/celebrations';
 import { buildDemo } from './lib/demo';
@@ -12,7 +12,7 @@ import { currentDataKey } from './lib/session';
 
 /** The current account's storage key (see lib/session.ts). Read at call time; it changes on sign-in. */
 export const storageKey = () => useStore.persist.getOptions().name ?? currentDataKey();
-export const STATE_VERSION = 5;
+export const STATE_VERSION = 6;
 
 export const uid = () => crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 
@@ -137,7 +137,8 @@ function blankProject(ws: Workspace, quarter: number, name: string): Project {
     pm: '',
     em: '',
     goal: '',
-    gaTarget: '',
+    gaTargetWeek: null,
+    gaTargetText: '',
     productArea: '',
     notes: '',
     createdAt: Date.now(),
@@ -641,6 +642,18 @@ export function migrate(raw: Partial<PersistedState>, version: number): Persiste
         schedules[id] = { ...rest, phaseOverride: keep };
       }
       return { ...plan, schedules };
+    });
+  }
+  // v6: GA target became a week. Text that parses as a date becomes that week;
+  // anything else ("after the pricing review") is kept as text.
+  if (version < 6) {
+    const sm = state.settings.fiscalStartMonth;
+    state.projects = state.projects.map((p) => {
+      const { gaTarget, ...rest } = p as Project & { gaTarget?: string };
+      if ((p as Partial<Project>).gaTargetWeek !== undefined) return rest as Project;
+      const text = (gaTarget ?? '').trim();
+      const parsed = text ? parseLooseDate(text, quarterStartUtc(p.quarter, sm)) : null;
+      return { ...rest, gaTargetWeek: parsed == null ? null : utcToAbsWeek(parsed), gaTargetText: parsed == null ? text : '' };
     });
   }
   // Backfill unlocks that are provable from existing data (time unknown -> 0).

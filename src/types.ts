@@ -61,7 +61,10 @@ export interface Project {
   pm: string;
   em: string;
   goal: string;
-  gaTarget: string;
+  /** GA / launch target as an absolute week (see lib/quarters.ts), or null when not set. */
+  gaTargetWeek: number | null;
+  /** Free-text GA target from before it was a date, kept when it couldn't be parsed. */
+  gaTargetText: string;
   productArea: string;
   notes: string;
   createdAt: number;

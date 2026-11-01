@@ -8,14 +8,15 @@ import { openProject, useDesignerMap, useDesigners, usePhase, useQuarterStart, u
 import type { Entry } from '../lib/capacity';
 import type { ID } from '../types';
 import { PRIORITIES, SIZES } from '../types';
-import { formatWeekRange } from '../lib/quarters';
+import { formatAbsWeek, formatWeekRange } from '../lib/quarters';
+import { gaSlipWeeks } from '../lib/sizing';
 import { Avatar, EmptyState, PriorityChip } from './ui';
 
-type Col = 'name' | 'designer' | 'phase' | 'priority' | 'size' | 'workType' | 'start' | 'duration' | 'allocation' | 'confirmed' | 'ticket' | 'productArea' | 'pm' | 'em';
+type Col = 'name' | 'designer' | 'phase' | 'priority' | 'size' | 'workType' | 'start' | 'duration' | 'allocation' | 'ga' | 'confirmed' | 'ticket' | 'productArea' | 'pm' | 'em';
 type SortKey = Col;
 
 const COMPACT: Col[] = ['name', 'designer', 'phase', 'priority', 'start', 'confirmed'];
-const FULL: Col[] = ['name', 'ticket', 'designer', 'phase', 'priority', 'workType', 'size', 'start', 'duration', 'allocation', 'productArea', 'pm', 'em', 'confirmed'];
+const FULL: Col[] = ['name', 'ticket', 'designer', 'phase', 'priority', 'workType', 'size', 'start', 'duration', 'allocation', 'ga', 'productArea', 'pm', 'em', 'confirmed'];
 
 const PRI_ORDER = { P0: 0, P1: 1, P2: 2, P3: 3 };
 const SIZE_ORDER = { S: 0, M: 1, L: 2, XL: 3 };
@@ -59,6 +60,7 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
         case 'start': return s.startWeek;
         case 'duration': return s.duration;
         case 'allocation': return s.allocation;
+        case 'ga': return p.gaTargetWeek ?? Infinity;
         case 'confirmed': return s.confirmed ? 0 : 1;
         default: return String(p[sort.key as 'name'] ?? '').toLowerCase();
       }
@@ -95,7 +97,7 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
   );
   const headLabels: Record<Col, string> = {
     name: labels.initiative, designer: 'Designer', phase: 'Phase', priority: 'Pri', size: 'Size', workType: 'Type',
-    start: 'When', duration: 'Wks', allocation: 'Alloc', confirmed: 'Status', ticket: labels.ticket,
+    start: 'When', duration: 'Wks', allocation: 'Alloc', ga: labels.gaTarget, confirmed: 'Status', ticket: labels.ticket,
     productArea: labels.productArea, pm: labels.pm, em: labels.em,
   };
 
@@ -179,6 +181,7 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
                 start: <span className="small nowrap muted">{formatWeekRange(qStart + s.startWeek, s.duration)}</span>,
                 duration: s.duration,
                 allocation: `${s.allocation}%`,
+                ga: <GaCell project={p} schedule={s} />,
                 confirmed: s.confirmed ? <span className="chip ok">Confirmed</span> : <span className="chip">Tentative</span>,
                 ticket: <span className="mono">{p.ticket}</span>,
                 productArea: <span className="small">{p.productArea}</span>,
@@ -203,6 +206,18 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
         )}
       </div>
     </div>
+  );
+}
+
+function GaCell({ project: p, schedule: s }: Entry) {
+  const sm = useStore((st) => st.settings.fiscalStartMonth);
+  if (p.gaTargetWeek == null) return <span className="small faint" title={p.gaTargetText || undefined}>{p.gaTargetText ? 'Note' : '–'}</span>;
+  const slip = gaSlipWeeks(p, s, sm) ?? 0;
+  return (
+    <span className="small nowrap row" style={{ gap: 6 }}>
+      {formatAbsWeek(p.gaTargetWeek)}
+      {slip > 0 && <span className="chip over" title={`Design ends ${slip} week${slip > 1 ? 's' : ''} after GA`}>+{slip}w</span>}
+    </span>
   );
 }
 
