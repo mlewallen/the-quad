@@ -5,6 +5,7 @@ import type { Designer } from '../types';
 import { loadLevel } from '../lib/capacity';
 import { dialogIn, ease, sheetIn } from '../lib/motion';
 import { useIsMobile } from '../hooks';
+import { Select, type SelectOption } from './inputs';
 
 export function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((s) => s[0]!.toUpperCase()).join('') || '?';
@@ -201,16 +202,13 @@ export function TextInput({
 }
 
 export function DesignerSelect({
-  designers, value, onChange, allowNone = true, noneLabel = 'Unassigned', className = 'select',
-}: { designers: Designer[]; value: string | null; onChange: (v: string | null) => void; allowNone?: boolean; noneLabel?: string; className?: string }) {
-  return (
-    <select className={className} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)}>
-      {allowNone && <option value="">{noneLabel}</option>}
-      {designers.map((d) => (
-        <option key={d.id} value={d.id}>{d.name}</option>
-      ))}
-    </select>
-  );
+  designers, value, onChange, allowNone = true, noneLabel = 'Unassigned', ariaLabel, size, placeholder,
+}: { designers: Designer[]; value: string | null; onChange: (v: string | null) => void; allowNone?: boolean; noneLabel?: string; ariaLabel?: string; size?: 'sm'; placeholder?: string }) {
+  const options: SelectOption<string>[] = [
+    ...(allowNone ? [{ value: '', label: noneLabel, icon: <Avatar /> }] : []),
+    ...designers.map((d) => ({ value: d.id, label: d.name, icon: <Avatar designer={d} /> })),
+  ];
+  return <Select value={placeholder && value == null ? undefined : value ?? ''} options={options} onChange={(v) => onChange(v || null)} ariaLabel={ariaLabel} size={size} placeholder={placeholder} menuWidth={220} />;
 }
 
 export function ListEditor({ items, onChange, placeholder }: { items: string[]; onChange: (v: string[]) => void; placeholder?: string }) {

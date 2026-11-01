@@ -11,6 +11,7 @@ import { PRIORITIES, SIZES } from '../types';
 import { formatAbsWeek, formatWeekRange } from '../lib/quarters';
 import { gaSlipWeeks } from '../lib/sizing';
 import { Avatar, EmptyState, PriorityChip } from './ui';
+import { Checkbox, Select, type SelectOption } from './inputs';
 
 type Col = 'name' | 'designer' | 'phase' | 'priority' | 'size' | 'workType' | 'start' | 'duration' | 'allocation' | 'ga' | 'confirmed' | 'ticket' | 'productArea' | 'pm' | 'em';
 type SortKey = Col;
@@ -110,24 +111,14 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
           <Search size={14} />
           <input className="input sm" placeholder="Filter by name, ticket, partner…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Filter" />
         </div>
-        <select className="select sm" value={fDesigner} onChange={(e) => setFDesigner(e.target.value)} aria-label="Filter by designer">
-          <option value="">All designers</option>
-          <option value="__none">Unassigned</option>
-          {designers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
-        <select className="select sm" value={fPhase} onChange={(e) => setFPhase(e.target.value)} aria-label="Filter by phase">
-          <option value="">All phases</option>
-          {workspace.config.phases.map((p) => <option key={p}>{p}</option>)}
-        </select>
-        <select className="select sm" value={fPriority} onChange={(e) => setFPriority(e.target.value)} aria-label="Filter by priority">
-          <option value="">All priorities</option>
-          {PRIORITIES.map((p) => <option key={p}>{p}</option>)}
-        </select>
-        <select className="select sm" value={fStatus} onChange={(e) => setFStatus(e.target.value)} aria-label="Filter by status">
-          <option value="">Any status</option>
-          <option value="confirmed">Confirmed</option>
-          <option value="tentative">Tentative</option>
-        </select>
+        <Select size="sm" width="auto" menuWidth={200} value={fDesigner} onChange={setFDesigner} ariaLabel="Filter by designer" options={[
+          { value: '', label: 'All designers' },
+          { value: '__none', label: 'Unassigned', icon: <Avatar /> },
+          ...designers.map((d) => ({ value: d.id, label: d.name, icon: <Avatar designer={d} /> })),
+        ]} />
+        <Select size="sm" width="auto" value={fPhase} onChange={setFPhase} ariaLabel="Filter by phase" options={[{ value: '', label: 'All phases' }, ...workspace.config.phases.map((p) => ({ value: p, label: p }))]} />
+        <Select size="sm" width="auto" value={fPriority} onChange={setFPriority} ariaLabel="Filter by priority" options={[{ value: '', label: 'All priorities' }, ...PRIORITIES.map((p) => ({ value: p, label: <PriorityChip p={p} />, text: p }))]} />
+        <Select size="sm" width="auto" value={fStatus} onChange={setFStatus} ariaLabel="Filter by status" options={[{ value: '', label: 'Any status' }, { value: 'confirmed', label: 'Confirmed' }, { value: 'tentative', label: 'Tentative' }]} />
       </div>
 
       <AnimatePresence>
@@ -143,10 +134,10 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
           <thead>
             <tr>
               <th className="check">
-                <input
-                  type="checkbox"
-                  aria-label="Select all"
+                <Checkbox
+                  ariaLabel="Select all"
                   checked={allSelected}
+                  indeterminate={!allSelected && selIds.length > 0}
                   onChange={() => setSelected(allSelected ? new Set() : new Set(visibleIds))}
                 />
               </th>
@@ -193,8 +184,8 @@ export default function InitiativeTable({ entries, variant = 'compact' }: { entr
               };
               return (
                 <motion.tr layout="position" transition={spring.smooth} key={p.id} className={`clickable ${selected.has(p.id) ? 'selected' : ''}`} onClick={() => openProject(p.id)}>
-                  <td className="check" onClick={(e) => { e.stopPropagation(); toggle(p.id, e.shiftKey); }}>
-                    <input type="checkbox" checked={selected.has(p.id)} readOnly aria-label={`Select ${p.name}`} />
+                  <td className="check" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox checked={selected.has(p.id)} ariaLabel={`Select ${p.name}`} onChange={(_, e) => toggle(p.id, e.shiftKey)} />
                   </td>
                   {cols.map((c) => <td key={c}>{cell[c]}</td>)}
                 </motion.tr>
@@ -229,38 +220,20 @@ function BulkBar({ ids, onDone }: { ids: ID[]; onDone: () => void }) {
   const del = useStore((s) => s.deleteProjects);
   const designers = useDesigners();
   const workspace = useWorkspace()!;
-  const pick = (fn: (v: string) => void) => (e: React.ChangeEvent<HTMLSelectElement>) => {
-    if (e.target.value === '') return;
-    fn(e.target.value);
-    e.target.value = '';
-  };
+  // Action menus: each pick applies to the selection, and the trigger goes back to its label.
+  const action = (placeholder: string, options: SelectOption<string>[], run: (v: string) => void) => (
+    <Select size="sm" width="auto" menuWidth={190} value={null} placeholder={placeholder} ariaLabel={placeholder.replace('…', '')} options={options} onChange={run} />
+  );
   return (
     <div className="bulkbar">
       <b>{ids.length} selected</b>
       <span className="faint tiny">Shift-click to select a range</span>
       <span className="spacer" />
-      <select className="select sm" style={{ width: 'auto' }} defaultValue="" onChange={pick((v) => bulk(ids, {}, { designerId: v === '__none' ? null : v }))}>
-        <option value="" disabled>Assign…</option>
-        <option value="__none">Unassign</option>
-        {designers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-      </select>
-      <select className="select sm" style={{ width: 'auto' }} defaultValue="" onChange={pick((v) => bulk(ids, {}, { phaseOverride: v === '__auto' ? null : v }))}>
-        <option value="" disabled>Phase…</option>
-        <option value="__auto">Follow schedule</option>
-        {workspace.config.phases.map((p) => <option key={p}>{p}</option>)}
-      </select>
-      <select className="select sm" style={{ width: 'auto' }} defaultValue="" onChange={pick((v) => bulk(ids, { priority: v as never }, {}))}>
-        <option value="" disabled>Priority…</option>
-        {PRIORITIES.map((p) => <option key={p}>{p}</option>)}
-      </select>
-      <select className="select sm" style={{ width: 'auto' }} defaultValue="" onChange={pick((v) => bulk(ids, { size: v as never }, {}))}>
-        <option value="" disabled>Size…</option>
-        {SIZES.map((p) => <option key={p}>{p}</option>)}
-      </select>
-      <select className="select sm" style={{ width: 'auto' }} defaultValue="" onChange={pick((v) => bulk(ids, { workType: v }, {}))}>
-        <option value="" disabled>Type…</option>
-        {workspace.config.workTypes.map((p) => <option key={p}>{p}</option>)}
-      </select>
+      {action('Assign…', [{ value: '__none', label: 'Unassign', icon: <Avatar /> }, ...designers.map((d) => ({ value: d.id, label: d.name, icon: <Avatar designer={d} /> }))], (v) => bulk(ids, {}, { designerId: v === '__none' ? null : v }))}
+      {action('Phase…', [{ value: '__auto', label: 'Follow schedule' }, ...workspace.config.phases.map((p) => ({ value: p, label: p }))], (v) => bulk(ids, {}, { phaseOverride: v === '__auto' ? null : v }))}
+      {action('Priority…', PRIORITIES.map((p) => ({ value: p, label: <PriorityChip p={p} />, text: p })), (v) => bulk(ids, { priority: v as never }, {}))}
+      {action('Size…', SIZES.map((p) => ({ value: p, label: p })), (v) => bulk(ids, { size: v as never }, {}))}
+      {action('Type…', workspace.config.workTypes.map((p) => ({ value: p, label: p })), (v) => bulk(ids, { workType: v }, {}))}
       <button className="btn sm" onClick={() => { bulk(ids, {}, { confirmed: true }); toast(`Confirmed ${ids.length}`, { tone: 'success' }); }}><Check size={13} /> Confirm</button>
       <button className="btn sm" onClick={() => bulk(ids, {}, { confirmed: false })}>Unconfirm</button>
       <button

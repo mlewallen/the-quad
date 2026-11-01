@@ -7,16 +7,22 @@ import { popIn } from '../lib/motion';
  * Anchored popover, rendered in a portal on <body> so it is never clipped by
  * an ancestor's overflow (e.g. the sidebar). Position is computed from the
  * trigger's rect and kept in sync on scroll/resize. Closes on outside click,
- * Escape, or when a child calls `close`.
+ * Escape, or when a child calls `close`; keyboard focus inside goes back to
+ * the trigger when it closes.
  */
 export function Popover({
-  trigger, children, align = 'start', width = 260, side = 'bottom',
+  trigger, children, align = 'start', width = 260, side = 'bottom', role = 'menu', matchTriggerWidth, className,
 }: {
-  trigger: (p: { open: boolean; toggle: () => void }) => ReactNode;
+  trigger: (p: { open: boolean; toggle: () => void; setOpen: (v: boolean) => void }) => ReactNode;
   children: (close: () => void) => ReactNode;
   align?: 'start' | 'end';
   side?: 'bottom' | 'right';
   width?: number;
+  /** The panel's role: 'menu' for action menus, 'presentation' when the content brings its own (listbox, dialog). */
+  role?: string;
+  /** Make the panel at least as wide as the trigger (select menus). */
+  matchTriggerWidth?: boolean;
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [style, setStyle] = useState<CSSProperties>({});
@@ -32,7 +38,7 @@ export function Popover({
     const z = Number(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1;
     const vw = window.innerWidth;
     // Never wider than the viewport (phones); a no-op at desktop sizes.
-    const w = Math.min(width * z, vw - 16);
+    const w = Math.min(Math.max(width * z, matchTriggerWidth ? r.width : 0), vw - 16);
     const gap = 6 * z;
     let top: number;
     let left: number;
@@ -53,6 +59,19 @@ export function Popover({
   useLayoutEffect(() => {
     if (open) place();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Hand focus back to the trigger when the panel closes with focus inside it (or lost).
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (open) {
+      wasOpen.current = true;
+      return;
+    }
+    if (!wasOpen.current) return;
+    wasOpen.current = false;
+    const a = document.activeElement;
+    if (!a || a === document.body || panel.current?.contains(a)) anchor.current?.querySelector<HTMLElement>('button, [tabindex]')?.focus({ preventScroll: true });
   }, [open]);
 
   useEffect(() => {
@@ -78,11 +97,11 @@ export function Popover({
 
   return (
     <div className="popover-anchor" ref={anchor}>
-      {trigger({ open, toggle: () => setOpen((o) => !o) })}
+      {trigger({ open, toggle: () => setOpen((o) => !o), setOpen })}
       {createPortal(
         <AnimatePresence>
           {open && (
-            <motion.div ref={panel} className="popover" role="menu" style={style} variants={popIn} initial="initial" animate="animate" exit="exit">
+            <motion.div ref={panel} className={`popover ${className ?? ''}`} role={role} style={style} variants={popIn} initial="initial" animate="animate" exit="exit">
               {children(() => setOpen(false))}
             </motion.div>
           )}

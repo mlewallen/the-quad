@@ -14,7 +14,8 @@ import { formatAbsWeek, formatWeekRange } from '../lib/quarters';
 import { WeekPicker } from './WeekPicker';
 import { effortFor, gaSlipWeeks, phaseAt, phaseBreakdown, recommendedDurationForCurve, weeksIntoSchedule } from '../lib/sizing';
 import CurveEditor from './CurveEditor';
-import { DesignerSelect, Field, Section, Slider, TextInput, useFocusTrap } from './ui';
+import { DesignerSelect, Field, PriorityChip, Section, Slider, TextInput, useFocusTrap } from './ui';
+import { Checkbox, NumberField, Select } from './inputs';
 
 export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMode }) {
   const entry = useEntry(id);
@@ -124,24 +125,20 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
               <a className="small" href={p.reference} target="_blank" rel="noreferrer">Open reference ↗</a>
             )}
             <div className="row" style={{ gap: 18 }}>
-              <label className="row small">
-                <input type="checkbox" checked={s.confirmed} disabled={!s.designerId} onChange={(e) => us({ confirmed: e.target.checked })} />
+              <Checkbox className="small" checked={s.confirmed} disabled={!s.designerId} onChange={(v) => us({ confirmed: v })}>
                 Confirmed assignment {!s.designerId && <span className="faint">(assign first)</span>}
-              </label>
-              <label className="row small">
-                <input type="checkbox" checked={p.epic} onChange={(e) => up({ epic: e.target.checked })} />
-                Epic
-              </label>
+              </Checkbox>
+              <Checkbox className="small" checked={p.epic} onChange={(v) => up({ epic: v })}>Epic</Checkbox>
             </div>
           </Section>
 
           <Section title="Assignment">
             <div className="grid2">
               <Field label="Primary designer">
-                <DesignerSelect designers={designers} value={s.designerId} onChange={(v) => us({ designerId: v })} />
+                <DesignerSelect designers={designers} value={s.designerId} onChange={(v) => us({ designerId: v })} ariaLabel="Primary designer" />
               </Field>
               <Field label="Pair designer">
-                <DesignerSelect designers={designers.filter((d) => d.id !== s.designerId)} value={s.pairDesignerId} onChange={(v) => us({ pairDesignerId: v })} noneLabel="None" />
+                <DesignerSelect designers={designers.filter((d) => d.id !== s.designerId)} value={s.pairDesignerId} onChange={(v) => us({ pairDesignerId: v })} noneLabel="None" ariaLabel="Pair designer" />
               </Field>
             </div>
             {s.pairDesignerId && <span className="tiny faint">Pair designers are counted at half the primary's allocation.</span>}
@@ -150,11 +147,17 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
           <Section title="Status">
             <div className="grid3">
               <Field label="Phase">
-                <select className="select" value={s.phaseOverride ?? ''} onChange={(e) => us({ phaseOverride: e.target.value || null })} aria-describedby="phase-hint">
-                  <option value="">Auto · {autoPhase}</option>
-                  {s.phaseOverride && !workspace.config.phases.includes(s.phaseOverride) && <option>{s.phaseOverride}</option>}
-                  {workspace.config.phases.map((x) => <option key={x}>{x}</option>)}
-                </select>
+                <Select
+                  value={s.phaseOverride ?? ''}
+                  onChange={(v) => us({ phaseOverride: v || null })}
+                  ariaLabel="Phase"
+                  describedBy="phase-hint"
+                  options={[
+                    { value: '', label: `Auto · ${autoPhase}`, hint: 'schedule' },
+                    ...(s.phaseOverride && !workspace.config.phases.includes(s.phaseOverride) ? [{ value: s.phaseOverride, label: s.phaseOverride }] : []),
+                    ...workspace.config.phases.map((x) => ({ value: x, label: x })),
+                  ]}
+                />
                 <span id="phase-hint" className="tiny faint">
                   {s.phaseOverride ? (
                     <>Set manually. <button className="link-btn" style={{ color: 'var(--accent)' }} onClick={() => us({ phaseOverride: null })}>Follow the schedule</button></>
@@ -162,15 +165,15 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
                 </span>
               </Field>
               <Field label="Priority">
-                <select className="select" value={p.priority} onChange={(e) => up({ priority: e.target.value as Project['priority'] })}>
-                  {PRIORITIES.map((x) => <option key={x}>{x}</option>)}
-                </select>
+                <Select value={p.priority} onChange={(v) => up({ priority: v })} ariaLabel="Priority" options={PRIORITIES.map((x) => ({ value: x, label: <PriorityChip p={x} />, text: x }))} />
               </Field>
               <Field label="Work type">
-                <select className="select" value={p.workType} onChange={(e) => up({ workType: e.target.value })}>
-                  {!workspace.config.workTypes.includes(p.workType) && <option>{p.workType}</option>}
-                  {workspace.config.workTypes.map((x) => <option key={x}>{x}</option>)}
-                </select>
+                <Select
+                  value={p.workType}
+                  onChange={(v) => up({ workType: v })}
+                  ariaLabel="Work type"
+                  options={[...(workspace.config.workTypes.includes(p.workType) ? [] : [p.workType]), ...workspace.config.workTypes].map((x) => ({ value: x, label: x }))}
+                />
               </Field>
             </div>
           </Section>
@@ -188,7 +191,7 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
                 />
               </Field>
               <Field label="Duration (weeks)">
-                <input className="input" type="number" min={1} max={52} value={s.duration} onChange={(e) => us({ duration: Number(e.target.value) || 1 })} />
+                <NumberField value={s.duration} min={1} max={52} onChange={(v) => us({ duration: v })} ariaLabel="Duration in weeks" />
               </Field>
               <Field label="Size">
                 <div className="segmented">
@@ -222,10 +225,14 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
                 <div key={m.id} className="col" style={{ gap: 4, paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
                   <div className="row">
                     <Diamond size={14} style={{ color, flex: 'none' }} fill="currentColor" />
-                    <select className="select sm" style={{ width: 'auto' }} value={m.type} onChange={(e) => updMilestone(m.id, { type: e.target.value })}>
-                      {!workspace.config.milestoneTypes.includes(m.type) && <option>{m.type}</option>}
-                      {workspace.config.milestoneTypes.map((t) => <option key={t}>{t}</option>)}
-                    </select>
+                    <Select
+                      size="sm"
+                      width="auto"
+                      value={m.type}
+                      onChange={(v) => updMilestone(m.id, { type: v })}
+                      ariaLabel="Milestone type"
+                      options={[...(workspace.config.milestoneTypes.includes(m.type) ? [] : [m.type]), ...workspace.config.milestoneTypes].map((t) => ({ value: t, label: t }))}
+                    />
                     <WeekPicker
                       size="sm"
                       value={qStart + s.startWeek + Math.floor(m.offset)}

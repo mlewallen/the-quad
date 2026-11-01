@@ -14,6 +14,7 @@ import {
 import { formatWeekRange } from '../lib/quarters';
 import { ease, sheetIn } from '../lib/motion';
 import { Avatar, PriorityChip, useFocusTrap } from './ui';
+import { Checkbox, Select } from './inputs';
 
 type Tab = 'paste' | 'upload' | 'sheets' | 'trackers';
 
@@ -280,14 +281,14 @@ function MapStep({
             <tr>
               {headers.map((_, i) => (
                 <th key={i} style={{ top: 33 }}>
-                  <select
-                    className={`select sm ${mapping[i] ? 'mapped' : ''}`}
+                  <Select
+                    size="sm"
+                    className={mapping[i] ? 'mapped' : ''}
                     value={mapping[i] ?? ''}
-                    onChange={(e) => setMapping(mapping.map((m, j) => (j === i ? (e.target.value as ItemField) : m === e.target.value ? '' : m)))}
-                  >
-                    <option value="">Ignore</option>
-                    {(Object.keys(FIELD_LABELS) as ItemField[]).map((f) => <option key={f} value={f}>{FIELD_LABELS[f]}</option>)}
-                  </select>
+                    ariaLabel={`Map column ${headers[i] || i + 1}`}
+                    onChange={(v) => setMapping(mapping.map((m, j) => (j === i ? (v as ItemField) : m === v ? '' : m)))}
+                    options={[{ value: '', label: 'Ignore' }, ...(Object.keys(FIELD_LABELS) as ItemField[]).map((f) => ({ value: f, label: FIELD_LABELS[f] }))]}
+                  />
                 </th>
               ))}
             </tr>
@@ -349,10 +350,7 @@ function ReviewStep({ items, source, onBack, onDone }: { items: ExternalItem[]; 
         {warnings > 0 && <span className="chip warn"><AlertTriangle size={11} /> {warnings} to check</span>}
         <span className="spacer" />
         {plan.some((r) => r.action === 'update') && (
-          <label className="row small" style={{ gap: 6 }}>
-            <input type="checkbox" checked={updateExisting} onChange={(e) => setUpdateExisting(e.target.checked)} />
-            Update matching projects
-          </label>
+          <Checkbox className="small" checked={updateExisting} onChange={setUpdateExisting}>Update matching projects</Checkbox>
         )}
       </div>
       <div className="table-wrap review-table">
@@ -367,12 +365,11 @@ function ReviewStep({ items, source, onBack, onDone }: { items: ExternalItem[]; 
               return (
                 <tr key={i} className={off ? 'off' : ''}>
                   <td className="check">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={!off}
                       disabled={!updateExisting && r.action === 'update'}
                       onChange={() => { const n = new Set(skip); n.has(i) ? n.delete(i) : n.add(i); setSkip(n); }}
-                      aria-label={`Include ${r.item.title}`}
+                      ariaLabel={`Include ${r.item.title}`}
                     />
                   </td>
                   <td>

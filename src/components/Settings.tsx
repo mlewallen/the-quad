@@ -8,13 +8,14 @@ import { confirmDialog, toast } from '../feedback';
 import { storageKey, useStore } from '../store';
 import { entriesFor, navigate, useActivePlan, useIsMobile, useQuarterProjects, useWorkspace } from '../hooks';
 import type { FieldLabels, PersistedState, TeamType, ThemeMode } from '../types';
-import { ACCENT_PRESETS, TEAM_TYPES } from '../lib/defaults';
+import { ACCENT_PRESETS, DESIGNER_COLORS, TEAM_TYPES } from '../lib/defaults';
 import { CELEBRATIONS, type CelebrationId } from '../lib/celebrations';
 import { MONTHS, formatDate, quarterLabel } from '../lib/quarters';
 import { ease, staggerChild, staggerParent } from '../lib/motion';
 import { ImportFlow } from './Importer';
 import { listSignups, signOut, signupsCsv, updateAccount, useAccount } from '../account';
 import { ListEditor, Slider, Switch, TextInput } from './ui';
+import { ColorField, Select } from './inputs';
 
 interface SectionDef {
   id: string;
@@ -188,10 +189,17 @@ function Appearance() {
             {ACCENT_PRESETS.map((c) => (
               <button key={c} className={`swatch-btn ${s.accent === c ? 'on' : ''}`} style={{ background: c }} aria-label={`Accent ${c}`} aria-pressed={s.accent === c} onClick={() => update({ accent: c })} />
             ))}
-            <label className={`swatch-btn custom ${custom ? 'on' : ''}`} style={custom ? { background: s.accent } : undefined} title="Custom color">
-              <Pipette size={13} />
-              <input type="color" value={s.accent} onChange={(e) => update({ accent: e.target.value })} aria-label="Custom accent color" />
-            </label>
+            <ColorField
+              value={s.accent}
+              swatches={[...ACCENT_PRESETS, ...DESIGNER_COLORS.filter((c) => !ACCENT_PRESETS.includes(c))].slice(0, 18)}
+              onChange={(c) => update({ accent: c })}
+              ariaLabel="Custom accent color"
+              trigger={({ open, toggle }) => (
+                <button type="button" className={`swatch-btn custom ${custom || open ? 'on' : ''}`} style={custom ? { background: s.accent } : undefined} title="Custom color" aria-label={`Custom accent color${custom ? `: ${s.accent}` : ''}`} aria-haspopup="dialog" aria-expanded={open} onClick={toggle}>
+                  <Pipette size={13} />
+                </button>
+              )}
+            />
           </div>
         </Row>
         <Row label="Interface scale" description={mobile ? 'Applies on larger screens. Phones use your device’s text size.' : 'Make everything larger or smaller. 100% is the default.'}>
@@ -238,9 +246,15 @@ function Team() {
       <AnimatePresence initial={false}>
         {ws.designers.map((d) => (
           <motion.div key={d.id} className="set-row designer-row" layout initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
-            <label className="color-dot" style={{ background: d.color }} title="Change color">
-              <input type="color" value={d.color} onChange={(e) => updateDesigner(d.id, { color: e.target.value })} aria-label={`Color for ${d.name}`} />
-            </label>
+            <ColorField
+              value={d.color}
+              swatches={DESIGNER_COLORS}
+              onChange={(c) => updateDesigner(d.id, { color: c })}
+              ariaLabel={`Color for ${d.name}`}
+              trigger={({ open, toggle }) => (
+                <button type="button" className="color-dot" style={{ background: d.color }} title="Change color" aria-label={`Color for ${d.name}: ${d.color}`} aria-haspopup="dialog" aria-expanded={open} onClick={toggle} />
+              )}
+            />
             <TextInput value={d.name} onCommit={(v) => v.trim() && updateDesigner(d.id, { name: v.trim() })} />
             <button
               className="btn sm ghost icon danger"
@@ -311,9 +325,7 @@ function WorkspaceSettings() {
           <div style={{ width: 260 }}><TextInput value={ws.name} onCommit={(v) => v.trim() && updateWorkspace(ws.id, { name: v.trim() })} /></div>
         </Row>
         <Row label="Fiscal year starts in" description="Q1 begins in this month and each quarter is 13 weeks. Applies to every workspace.">
-          <select className="select" style={{ width: 180 }} value={fiscal} onChange={(e) => updateSettings({ fiscalStartMonth: Number(e.target.value) })}>
-            {MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}
-          </select>
+          <Select width={180} value={fiscal} onChange={(v) => updateSettings({ fiscalStartMonth: v })} ariaLabel="Fiscal year starts in" options={MONTHS.map((m, i) => ({ value: i, label: m }))} />
         </Row>
       </Group>
 
@@ -354,9 +366,7 @@ function WorkspaceSettings() {
           </div>
           <div className="set-control">
             <input className="input sm" style={{ width: 180 }} placeholder="Name" value={newName} onChange={(e) => setNewName(e.target.value)} />
-            <select className="select sm" style={{ width: 150 }} value={newType} onChange={(e) => setNewType(e.target.value as TeamType)}>
-              {TEAM_TYPES.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
+            <Select size="sm" width={150} value={newType} onChange={(v) => setNewType(v as TeamType)} ariaLabel="Team type" options={TEAM_TYPES.map((t) => ({ value: t.id, label: t.name }))} />
             <button
               className="btn sm primary"
               disabled={!newName.trim()}

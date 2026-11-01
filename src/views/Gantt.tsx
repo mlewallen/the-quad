@@ -14,6 +14,7 @@ import { loadLevel, summarize } from '../lib/capacity';
 import { weeklyAllocation } from '../lib/curves';
 import { formatAbsWeek, formatWeekRange, utcToAbsWeek } from '../lib/quarters';
 import { Avatar, barLabel, EmptyState, HealthStrip, LoadChip, PriorityChip, Toolbar } from '../components/ui';
+import { Select } from '../components/inputs';
 
 interface Hover {
   x: number;
@@ -86,12 +87,8 @@ export default function Gantt() {
         </div>
         <div className="row small">
           <span className="faint">Window</span>
-          <select className="select sm" style={{ width: 'auto' }} value={before} onChange={(e) => updateSettings({ ganttWeeksBefore: Number(e.target.value) })} aria-label="Weeks before quarter">
-            {[0, 2, 4, 8, 13].map((w) => <option key={w} value={w}>{w} wks before</option>)}
-          </select>
-          <select className="select sm" style={{ width: 'auto' }} value={after} onChange={(e) => updateSettings({ ganttWeeksAfter: Number(e.target.value) })} aria-label="Weeks after quarter">
-            {[0, 2, 4, 8, 13].map((w) => <option key={w} value={w}>{w} wks after</option>)}
-          </select>
+          <Select size="sm" width="auto" menuWidth={140} value={before} onChange={(v) => updateSettings({ ganttWeeksBefore: v })} ariaLabel="Weeks before quarter" options={[0, 2, 4, 8, 13].map((w) => ({ value: w, label: `${w} wks before` }))} />
+          <Select size="sm" width="auto" menuWidth={140} value={after} onChange={(v) => updateSettings({ ganttWeeksAfter: v })} ariaLabel="Weeks after quarter" options={[0, 2, 4, 8, 13].map((w) => ({ value: w, label: `${w} wks after` }))} />
         </div>
         <span className="spacer" />
         <Legend />
