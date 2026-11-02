@@ -22,6 +22,8 @@ The app opens on a sign-in screen. This isn't real authentication yet: an accoun
 - **Quick-add syntax**, one project per line: `Checkout redesign @maya !P1 ~L #Checkout 6w 50%` sets the designer, priority, size or story points, product area, duration and allocation.
 - **Trackers:** Jira, Asana, ServiceNow and Linear exports (CSV or JSON) and issue links are recognized automatically. Imported projects remember their tracker key, so importing again updates them instead of creating duplicates.
 
+**Jira epics:** child issues (matched by the Parent / Epic Link column, or `fields.parent` in JSON) are folded into their epic as its phases: each task's key becomes the phase's task key, its start and due dates set the phase's length, and the task that's in progress sets the current phase. Importing only the tasks of an epic that's already here updates that project's phases.
+
 `src/lib/ingest.ts` is where future live integrations plug in. Each source is turned into a common `ExternalItem` format. `planImport` then decides what to create and what to update (matching by tracker id, then ticket, then name), maps statuses to phases, priorities, points to sizes, and dates to weeks, and matches designers by email, name or first name. The store's `applyImport` writes the result. A live Jira or Asana sync only needs to produce `ExternalItem[]`.
 
 ## Demo data

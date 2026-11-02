@@ -162,7 +162,7 @@ export default function ProjectDetail({ id, mode }: { id: string; mode: DetailMo
                 />
                 <span id="phase-hint" className="tiny faint">
                   {s.phaseOverride ? (
-                    <>Set manually. <button className="link-btn" style={{ color: 'var(--accent)' }} onClick={() => us({ phaseOverride: null })}>Follow the schedule</button></>
+                    <>Pinned by hand or by a tracker import. <button className="link-btn" style={{ color: 'var(--accent)' }} onClick={() => us({ phaseOverride: null })}>Follow the schedule</button></>
                   ) : 'Follows the schedule'}
                 </span>
               </Field>

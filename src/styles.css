@@ -1042,6 +1042,8 @@ a.kpi-link:hover .kpi-label { color: var(--accent); }
 .connector-logo { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-weight: 800; color: #fff; background: var(--cc); flex: none; }
 .connector ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
 .map-table, .review-table { max-height: 380px; border: 1px solid var(--border); border-radius: var(--r-md); }
+.import-phases { display: flex !important; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.import-phases .chip { font-size: 11px; height: 20px; }
 .map-table .select.mapped { border-color: var(--accent-line); background-color: var(--accent-softer); }
 .review-table tr.off td { opacity: 0.45; }
 

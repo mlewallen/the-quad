@@ -92,7 +92,7 @@ function Hero({ plan }: { plan: ProjectPlan }) {
   const phase = weeksIn == null ? null : currentPhase(workspace.config.phases, s, weeksIn);
   const progress =
     weeksIn == null || !phase ? null
-    : s.phaseOverride ? `Now: ${phase} (set manually)`
+    : s.phaseOverride ? `Now: ${phase} (pinned)`
     : weeksIn < 0 ? `Starts in ${Math.ceil(-weeksIn)} wk${Math.ceil(-weeksIn) === 1 ? '' : 's'}`
     : weeksIn >= s.duration ? 'Design done'
     : `Now: ${phase}`;

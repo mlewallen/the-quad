@@ -322,6 +322,7 @@ function ReviewStep({ items, source, onBack, onDone }: { items: ExternalItem[]; 
   const creates = included.filter((r) => r.action === 'create');
   const updates = included.filter((r) => r.action === 'update');
   const warnings = included.reduce((a, r) => a + r.warnings.length, 0);
+  const childCount = plan.reduce((a, r) => a + (r.item.children?.length ?? 0), 0);
 
   const go = () => {
     const create: NewInitiative[] = creates.map((r) => ({
@@ -348,6 +349,7 @@ function ReviewStep({ items, source, onBack, onDone }: { items: ExternalItem[]; 
         <span className="chip ok">{creates.length} new</span>
         {plan.some((r) => r.action === 'update') && <span className="chip">{updates.length} update{updates.length === 1 ? '' : 's'}</span>}
         {warnings > 0 && <span className="chip warn"><AlertTriangle size={11} /> {warnings} to check</span>}
+        {childCount > 0 && <span className="chip" title="Child issues are folded into their epic as its phases">{childCount} task{childCount === 1 ? '' : 's'} → phases</span>}
         <span className="spacer" />
         {plan.some((r) => r.action === 'update') && (
           <Checkbox className="small" checked={updateExisting} onChange={setUpdateExisting}>Update matching projects</Checkbox>
@@ -379,9 +381,15 @@ function ReviewStep({ items, source, onBack, onDone }: { items: ExternalItem[]; 
                   </td>
                   <td>
                     <div className="col" style={{ gap: 0 }}>
-                      <span className="small ellipsis" style={{ fontWeight: 500, maxWidth: 260 }}>{r.project.name ?? r.existing?.name}</span>
+                      <span className="small ellipsis" style={{ fontWeight: 500, maxWidth: 260 }}>{r.project.name ?? r.existing?.name}{r.project.epic && <span className="chip accent" style={{ marginLeft: 6 }}>Epic</span>}</span>
                       <span className="tiny faint">
                         {r.item.externalId && <span className="mono">{r.item.externalId}</span>}
+                        {r.item.childrenOnly && <span> · phases from its tasks</span>}
+                        {r.schedule.phasePlan && (
+                          <span className="import-phases" style={{ display: 'block' }}>
+                            {r.schedule.phasePlan.map((p, k) => <span key={k} className="chip" title={p.ticket}>{p.phase} · {p.weeks}w</span>)}
+                          </span>
+                        )}
                         {r.warnings.map((w) => <span key={w} style={{ color: 'var(--warn)', display: 'block' }}><AlertTriangle size={10} /> {w}</span>)}
                       </span>
                     </div>
