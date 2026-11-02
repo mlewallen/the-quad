@@ -1,17 +1,40 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { Curve, CurveShape } from '../types';
 import { CURVE_LABELS, curveFactors } from '../lib/curves';
 
 /**
- * Per-week allocation shape. Dragging any bar switches the curve to "custom"
- * and stores factors at the current duration; they're resampled
- * proportionally if duration changes later.
+ * Per-week allocation shape. Dragging any bar, or focusing it and using the
+ * arrow keys, switches the curve to "custom" and stores factors at the current
+ * duration; they're resampled proportionally if duration changes later.
+ * Optional phase bands under the bars show which phase each week belongs to.
  */
 export default function CurveEditor({
-  curve, duration, max, onChange, color = 'var(--accent)',
-}: { curve: Curve; duration: number; max: number; onChange: (c: Curve) => void; color?: string }) {
+  curve, duration, max, onChange, color = 'var(--accent)', phases,
+}: {
+  curve: Curve;
+  duration: number;
+  max: number;
+  onChange: (c: Curve) => void;
+  color?: string;
+  phases?: { phase: string; start: number; weeks: number }[];
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const factors = curveFactors(curve, duration);
+  // Roving tab stop: one week is focusable at a time; ← → move between weeks.
+  const [active, setActive] = useState(0);
+  const focusRequest = useRef(false);
+  const at = Math.min(active, duration - 1);
+  useEffect(() => {
+    if (!focusRequest.current) return;
+    focusRequest.current = false;
+    ref.current?.querySelector<HTMLElement>(`[data-week="${at}"]`)?.focus();
+  }, [at]);
+
+  const setWeek = (i: number, f: number) => {
+    const working = factors.slice();
+    working[i] = Math.max(0, Math.min(1, Math.round(f * 20) / 20));
+    onChange({ shape: 'custom', values: working });
+  };
 
   const setFromPointer = (clientX: number, clientY: number, working: number[]) => {
     const el = ref.current!;
@@ -19,6 +42,7 @@ export default function CurveEditor({
     const i = Math.max(0, Math.min(duration - 1, Math.floor(((clientX - rect.left) / rect.width) * duration)));
     const f = Math.max(0, Math.min(1, 1 - (clientY - rect.top - 6) / (rect.height - 12)));
     working[i] = Math.round(f * 20) / 20;
+    setActive(i);
     onChange({ shape: 'custom', values: working.slice() });
   };
 
@@ -33,6 +57,19 @@ export default function CurveEditor({
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+  };
+
+  const onKeyDown = (e: KeyboardEvent, i: number) => {
+    const step = { ArrowUp: 0.05, ArrowDown: -0.05, PageUp: 0.25, PageDown: -0.25 }[e.key];
+    const move = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+    if (step != null) {
+      e.preventDefault();
+      setWeek(i, factors[i] + step);
+    } else if (move != null || e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      focusRequest.current = true;
+      setActive(e.key === 'Home' ? 0 : e.key === 'End' ? duration - 1 : Math.max(0, Math.min(duration - 1, i + move!)));
+    }
   };
 
   return (
@@ -50,14 +87,36 @@ export default function CurveEditor({
           </button>
         ))}
       </div>
-      <div className="curve-editor" ref={ref} onPointerDown={onPointerDown} style={{ paddingTop: 20 }} role="img" aria-label={`Weekly allocation: ${factors.map((f) => Math.round(f * max)).join(', ')}%`}>
+      <div className="curve-editor" ref={ref} onPointerDown={onPointerDown} style={{ paddingTop: 20 }} role="group" aria-label="Weekly allocation">
         {factors.map((f, i) => (
-          <div key={i} className="bar" style={{ height: `${Math.max(2, f * 100)}%`, background: color }} title={`Week ${i + 1}: ${Math.round(f * max)}%`}>
+          <div
+            key={i}
+            data-week={i}
+            className="bar"
+            role="slider"
+            tabIndex={i === at ? 0 : -1}
+            aria-label={`Week ${i + 1}${phases ? `, ${phases.find((p) => i >= p.start && i < p.start + p.weeks)?.phase ?? ''}` : ''}`}
+            aria-valuemin={0}
+            aria-valuemax={max}
+            aria-valuenow={Math.round(f * max)}
+            aria-valuetext={`${Math.round(f * max)}% of the week`}
+            onKeyDown={(e) => onKeyDown(e, i)}
+            onFocus={() => setActive(i)}
+            style={{ height: `${Math.max(2, f * 100)}%`, background: color }}
+            title={`Week ${i + 1}: ${Math.round(f * max)}%`}
+          >
             {duration <= 16 && <span>{Math.round(f * max)}</span>}
           </div>
         ))}
       </div>
-      <span className="tiny faint">Drag bars to draw a custom curve. Values are % of the designer's week.</span>
+      {phases && phases.length > 0 && (
+        <div className="curve-phases" aria-hidden>
+          {phases.filter((p) => p.weeks > 0).map((p, i) => (
+            <span key={`${p.phase}-${i}`} style={{ flexGrow: p.weeks }} title={`${p.phase}: ${p.weeks} wk${p.weeks === 1 ? '' : 's'}`}>{p.phase}</span>
+          ))}
+        </div>
+      )}
+      <span className="tiny faint">Drag bars to draw a custom curve, or focus one and use ↑ ↓ (Page Up/Down for bigger steps) and ← → between weeks. Values are % of the designer's week.</span>
     </div>
   );
 }

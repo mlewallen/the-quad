@@ -14,6 +14,7 @@ import {
 import { formatWeekRange } from '../lib/quarters';
 import { ease, sheetIn } from '../lib/motion';
 import { Avatar, PriorityChip, useFocusTrap } from './ui';
+import { Checkbox, Select } from './inputs';
 
 type Tab = 'paste' | 'upload' | 'sheets' | 'trackers';
 
@@ -280,14 +281,14 @@ function MapStep({
             <tr>
               {headers.map((_, i) => (
                 <th key={i} style={{ top: 33 }}>
-                  <select
-                    className={`select sm ${mapping[i] ? 'mapped' : ''}`}
+                  <Select
+                    size="sm"
+                    className={mapping[i] ? 'mapped' : ''}
                     value={mapping[i] ?? ''}
-                    onChange={(e) => setMapping(mapping.map((m, j) => (j === i ? (e.target.value as ItemField) : m === e.target.value ? '' : m)))}
-                  >
-                    <option value="">Ignore</option>
-                    {(Object.keys(FIELD_LABELS) as ItemField[]).map((f) => <option key={f} value={f}>{FIELD_LABELS[f]}</option>)}
-                  </select>
+                    ariaLabel={`Map column ${headers[i] || i + 1}`}
+                    onChange={(v) => setMapping(mapping.map((m, j) => (j === i ? (v as ItemField) : m === v ? '' : m)))}
+                    options={[{ value: '', label: 'Ignore' }, ...(Object.keys(FIELD_LABELS) as ItemField[]).map((f) => ({ value: f, label: FIELD_LABELS[f] }))]}
+                  />
                 </th>
               ))}
             </tr>
@@ -321,6 +322,7 @@ function ReviewStep({ items, source, onBack, onDone }: { items: ExternalItem[]; 
   const creates = included.filter((r) => r.action === 'create');
   const updates = included.filter((r) => r.action === 'update');
   const warnings = included.reduce((a, r) => a + r.warnings.length, 0);
+  const childCount = plan.reduce((a, r) => a + (r.item.children?.length ?? 0), 0);
 
   const go = () => {
     const create: NewInitiative[] = creates.map((r) => ({
@@ -347,12 +349,10 @@ function ReviewStep({ items, source, onBack, onDone }: { items: ExternalItem[]; 
         <span className="chip ok">{creates.length} new</span>
         {plan.some((r) => r.action === 'update') && <span className="chip">{updates.length} update{updates.length === 1 ? '' : 's'}</span>}
         {warnings > 0 && <span className="chip warn"><AlertTriangle size={11} /> {warnings} to check</span>}
+        {childCount > 0 && <span className="chip" title="Child issues are folded into their epic as its phases">{childCount} task{childCount === 1 ? '' : 's'} → phases</span>}
         <span className="spacer" />
         {plan.some((r) => r.action === 'update') && (
-          <label className="row small" style={{ gap: 6 }}>
-            <input type="checkbox" checked={updateExisting} onChange={(e) => setUpdateExisting(e.target.checked)} />
-            Update matching projects
-          </label>
+          <Checkbox className="small" checked={updateExisting} onChange={setUpdateExisting}>Update matching projects</Checkbox>
         )}
       </div>
       <div className="table-wrap review-table">
@@ -367,12 +367,11 @@ function ReviewStep({ items, source, onBack, onDone }: { items: ExternalItem[]; 
               return (
                 <tr key={i} className={off ? 'off' : ''}>
                   <td className="check">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={!off}
                       disabled={!updateExisting && r.action === 'update'}
                       onChange={() => { const n = new Set(skip); n.has(i) ? n.delete(i) : n.add(i); setSkip(n); }}
-                      aria-label={`Include ${r.item.title}`}
+                      ariaLabel={`Include ${r.item.title}`}
                     />
                   </td>
                   <td>
@@ -382,9 +381,15 @@ function ReviewStep({ items, source, onBack, onDone }: { items: ExternalItem[]; 
                   </td>
                   <td>
                     <div className="col" style={{ gap: 0 }}>
-                      <span className="small ellipsis" style={{ fontWeight: 500, maxWidth: 260 }}>{r.project.name ?? r.existing?.name}</span>
+                      <span className="small ellipsis" style={{ fontWeight: 500, maxWidth: 260 }}>{r.project.name ?? r.existing?.name}{r.project.epic && <span className="chip accent" style={{ marginLeft: 6 }}>Epic</span>}</span>
                       <span className="tiny faint">
                         {r.item.externalId && <span className="mono">{r.item.externalId}</span>}
+                        {r.item.childrenOnly && <span> · phases from its tasks</span>}
+                        {r.schedule.phasePlan && (
+                          <span className="import-phases" style={{ display: 'block' }}>
+                            {r.schedule.phasePlan.map((p, k) => <span key={k} className="chip" title={p.ticket}>{p.phase} · {p.weeks}w</span>)}
+                          </span>
+                        )}
                         {r.warnings.map((w) => <span key={w} style={{ color: 'var(--warn)', display: 'block' }}><AlertTriangle size={10} /> {w}</span>)}
                       </span>
                     </div>

@@ -22,6 +22,8 @@ The app opens on a sign-in screen. This isn't real authentication yet: an accoun
 - **Quick-add syntax**, one project per line: `Checkout redesign @maya !P1 ~L #Checkout 6w 50%` sets the designer, priority, size or story points, product area, duration and allocation.
 - **Trackers:** Jira, Asana, ServiceNow and Linear exports (CSV or JSON) and issue links are recognized automatically. Imported projects remember their tracker key, so importing again updates them instead of creating duplicates.
 
+**Jira epics:** child issues (matched by the Parent / Epic Link column, or `fields.parent` in JSON) are folded into their epic as its phases: each task's key becomes the phase's task key, its start and due dates set the phase's length, and the task that's in progress sets the current phase. Importing only the tasks of an epic that's already here updates that project's phases.
+
 `src/lib/ingest.ts` is where future live integrations plug in. Each source is turned into a common `ExternalItem` format. `planImport` then decides what to create and what to update (matching by tracker id, then ticket, then name), maps statuses to phases, priorities, points to sizes, and dates to weeks, and matches designers by email, name or first name. The store's `applyImport` writes the result. A live Jira or Asana sync only needs to produce `ExternalItem[]`.
 
 ## Demo data
@@ -40,8 +42,8 @@ To try the app with a realistic team, use **Settings → Data → Load demo team
 | `src/lib/curves.ts` | Flat / front / back / bell / custom allocation curves; custom curves resample when duration changes |
 | `src/lib/sizing.ts` | Size profiles (effort weeks by work type × S/M/L/XL) and the duration recommendation |
 | `src/lib/balancer.ts` | Greedy auto-balancer (even load, priority first, minimize conflicts) |
-| `src/views/*` | Home (readiness, next steps, capacity heatmap), Gantt, Team (per-designer load, projects and allocation), Projects (the bulk-editable table), Disruptions, Backlog, Designer |
-| `src/components/*` | Context bar, project detail, curve editor, onboarding, settings, import |
+| `src/views/*` | Home (readiness, next steps, capacity heatmap), Gantt, Team (per-designer load, projects and allocation), Projects (the bulk-editable table), Disruptions, Backlog, Designer, ProjectView (one project's phase-by-phase plan) |
+| `src/components/*` | Context bar, project detail, curve editor, onboarding, settings, import, the auto-balance wizard, and `inputs.tsx`: the app's own Select, Checkbox, NumberField and ColorField (no native form controls) |
 
 ## Planning rules worth knowing
 
@@ -49,6 +51,7 @@ To try the app with a realistic team, use **Settings → Data → Load demo team
 - A **pair designer** is counted at half the primary designer's weekly allocation.
 - Load colors: green ≤ 85%, yellow ≤ 100%, red above 100%.
 - A project's **phase follows its schedule**: today's position in the schedule picks a phase from `phaseBreakdown`. Choosing a phase in the project panel pins it until you switch it back to Auto.
-- The **backlog** holds three kinds of work: unassigned projects this quarter (which the auto-balancer places), unscheduled projects with no quarter yet (ranked, `quarter: null`), and projects already slotted into later quarters.
+- Each project has a **plan page** (`#/project/<id>`): the phases the designer works through, each with a length and a tracker task key (the project is the epic), plus milestones marked as something the designer delivers or gives input to. It works for this quarter, later quarters and unscheduled backlog work, whose plan is kept as a draft until it's planned into a quarter.
+- The **backlog** holds three kinds of work: unassigned projects this quarter (which the auto-balance wizard places), unscheduled projects with no quarter yet (ranked, `quarter: null`), and projects already slotted into later quarters.
 - Each quarter's capacity also includes work from neighbouring quarters, using each of those quarters' active plans, so spill-over shows up in the Gantt's before/after weeks.
 - **Google Sheets import** reads sheets shared as "Anyone with the link can view" through their CSV export URL. For private sheets, copy the cells and paste them. Full OAuth would need a Google Cloud client ID, which this repo doesn't have yet.

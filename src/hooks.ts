@@ -56,6 +56,46 @@ export function useEntries(): Entry[] {
   return useMemo(() => entriesFor(projects, plan), [projects, plan]);
 }
 
+export interface ProjectPlan {
+  project: Project;
+  schedule: Schedule;
+  /** The plan the schedule lives in; undefined for an unscheduled project's draft. */
+  planId?: ID;
+  /** Absolute start week, or null for unscheduled work (no dates yet). */
+  startAbs: number | null;
+  update: (patch: Partial<Schedule>) => void;
+}
+
+/**
+ * A project's plan wherever it lives: the active plan of its own quarter (this
+ * quarter or a later one), or its draft while it's unscheduled in the backlog.
+ */
+export function useProjectPlan(projectId: ID | null | undefined): ProjectPlan | undefined {
+  const project = useStore((s) => s.projects.find((p) => p.id === projectId));
+  const plans = useStore((s) => s.plans);
+  const activePlan = useStore((s) => s.activePlan);
+  const sm = useStore((s) => s.settings.fiscalStartMonth);
+  const { updateSchedule, updateDraft } = useStore.getState();
+  return useMemo(() => {
+    if (!project) return undefined;
+    if (project.quarter == null) {
+      if (!project.draft) return undefined;
+      return { project, schedule: project.draft, startAbs: null, update: (patch) => updateDraft(project.id, patch) };
+    }
+    const q = project.quarter;
+    const own = plans.filter((p) => p.workspaceId === project.workspaceId && p.quarter === q);
+    const plan = own.find((p) => p.id === activePlan[planKey(project.workspaceId, q)]) ?? own[0];
+    const schedule = plan?.schedules[project.id];
+    if (!plan || !schedule) return undefined;
+    return { project, schedule, planId: plan.id, startAbs: quarterStartAbsWeek(q, sm) + schedule.startWeek, update: (patch) => updateSchedule(project.id, patch, plan.id) };
+  }, [project, plans, activePlan, sm, updateSchedule, updateDraft]);
+}
+
+/** Open a project's full planning page (works for any quarter, and for unscheduled backlog work). */
+export function openProjectPage(id: ID) {
+  navigate({ project: id, page: true, settings: null });
+}
+
 export function useEntry(projectId: ID | null | undefined): { project: Project; schedule: Schedule } | undefined {
   const project = useStore((s) => s.projects.find((p) => p.id === projectId));
   const plan = useActivePlan();

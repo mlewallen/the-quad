@@ -4,6 +4,7 @@ import { ArrowRight, CalendarRange, CircleCheck, Gauge, Mail, Sparkles, Users } 
 import { EMAIL_RE, listAccounts, recordSignup, signIn } from '../account';
 import { toast } from '../feedback';
 import { ease, staggerChild, staggerParent } from '../lib/motion';
+import { Checkbox } from './inputs';
 
 /**
  * Sign-in gate shown before onboarding. Not authentication yet: it scopes
@@ -137,10 +138,9 @@ export default function Gate() {
                 {known && mode === 'signin' && <span className="small muted">Welcome back, {known.name.split(' ')[0]}.</span>}
 
                 {mode === 'signin' && !known?.marketingOptIn && (
-                  <label className="row small" style={{ gap: 8, alignItems: 'flex-start' }}>
-                    <input type="checkbox" checked={optIn} onChange={(e) => setOptIn(e.target.checked)} style={{ marginTop: 2 }} />
-                    <span>Email me occasional product updates. <span className="faint">Unsubscribe anytime.</span></span>
-                  </label>
+                  <Checkbox className="small gate-optin" checked={optIn} onChange={setOptIn}>
+                    Email me occasional product updates. <span className="faint">Unsubscribe anytime.</span>
+                  </Checkbox>
                 )}
 
                 <button className="btn primary gate-submit" type="submit" disabled={busy}>

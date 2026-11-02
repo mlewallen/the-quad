@@ -6,10 +6,11 @@ import { useStore } from '../store';
 import { navigate } from '../hooks';
 import type { Size, TeamType, ThemeMode } from '../types';
 import { SIZES } from '../types';
-import { DESIGNER_COLORS, defaultConfig, TEAM_TYPES } from '../lib/defaults';
+import { ACCENT_PRESETS, DESIGNER_COLORS, defaultConfig, TEAM_TYPES } from '../lib/defaults';
 import { MONTHS } from '../lib/quarters';
 import { recommendedDuration, defaultAllocation } from '../lib/sizing';
 import { ListEditor } from './ui';
+import { Checkbox, ColorField, Select } from './inputs';
 
 /** "Favorite color" picks: each sets the accent and a light or dark theme to match its mood. */
 const FAVORITES: { name: string; vibe: string; accent: string; theme: Exclude<ThemeMode, 'system'> }[] = [
@@ -151,15 +152,10 @@ export default function Onboarding() {
               </div>
               <div className="field">
                 <label htmlFor="fy">Fiscal year starts in</label>
-                <select id="fy" className="select" value={fiscalStartMonth} onChange={(e) => setFiscal(Number(e.target.value))}>
-                  {MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}
-                </select>
+                <Select id="fy" value={fiscalStartMonth} onChange={setFiscal} ariaLabel="Fiscal year starts in" options={MONTHS.map((m, i) => ({ value: i, label: m }))} />
               </div>
             </div>
-            <label className="row small">
-              <input type="checkbox" checked={customize} onChange={(e) => setCustomize(e.target.checked)} />
-              Customize disruption and milestone types
-            </label>
+            <Checkbox className="small" checked={customize} onChange={setCustomize}>Customize disruption and milestone types</Checkbox>
             {customize && (
               <div className="grid2">
                 <div className="field"><label>Disruption types</label><ListEditor items={disruptionTypes} onChange={setDisruptionTypes} /></div>
@@ -194,11 +190,18 @@ export default function Onboarding() {
               ))}
             </div>
             <div className="row" style={{ flexWrap: 'wrap' }}>
-              <label className={`btn ${favorite === 'custom' ? 'fav-custom-on' : ''}`} style={{ position: 'relative' }}>
-                {favorite === 'custom' ? <span className="dot" style={{ background: customAccent ?? undefined, width: 10, height: 10 }} /> : <Pipette size={14} />}
-                Something else…
-                <input type="color" className="fav-custom-input" value={customAccent ?? original.accent} onChange={(e) => pickCustom(e.target.value)} aria-label="Pick any color" />
-              </label>
+              <ColorField
+                value={customAccent ?? original.accent}
+                swatches={[...ACCENT_PRESETS, ...DESIGNER_COLORS.filter((c) => !ACCENT_PRESETS.includes(c))].slice(0, 18)}
+                onChange={pickCustom}
+                ariaLabel="Pick any color"
+                trigger={({ open, toggle }) => (
+                  <button type="button" className={`btn ${favorite === 'custom' || open ? 'fav-custom-on' : ''}`} onClick={toggle} aria-haspopup="dialog" aria-expanded={open}>
+                    {favorite === 'custom' ? <span className="dot" style={{ background: customAccent ?? undefined, width: 10, height: 10 }} /> : <Pipette size={14} />}
+                    Something else…
+                  </button>
+                )}
+              />
               {favorite && <button className="btn ghost" onClick={clearFavorite}>Keep the default</button>}
             </div>
           </div>
@@ -210,7 +213,7 @@ export default function Onboarding() {
             <p className="muted">Add each designer and pick a color — it’s how their work shows up everywhere.</p>
             {designers.map((d, i) => (
               <div key={i} className="row">
-                <input type="color" value={d.color} aria-label="Color" onChange={(e) => setDesigners(designers.map((x, j) => (j === i ? { ...x, color: e.target.value } : x)))} />
+                <ColorField value={d.color} swatches={DESIGNER_COLORS} ariaLabel={`Color for ${d.name || `designer ${i + 1}`}`} onChange={(c) => setDesigners(designers.map((x, j) => (j === i ? { ...x, color: c } : x)))} />
                 <input
                   className="input"
                   value={d.name}
@@ -244,16 +247,17 @@ export default function Onboarding() {
                     onChange={(e) => setInits(inits.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
                     onKeyDown={(e) => e.key === 'Enter' && i === inits.length - 1 && setInits([...inits, { name: '', designerIndex: null, size: 'M' }])}
                   />
-                  <select
-                    className="select"
-                    style={{ width: 150, flex: 'none' }}
-                    value={it.designerIndex ?? ''}
-                    onChange={(e) => setInits(inits.map((x, j) => (j === i ? { ...x, designerIndex: e.target.value === '' ? null : Number(e.target.value) } : x)))}
-                    aria-label="Designer"
-                  >
-                    <option value="">Unassigned</option>
-                    {designers.map((d, j) => d.name.trim() && <option key={j} value={j}>{d.name}</option>)}
-                  </select>
+                  <div style={{ width: 150, flex: 'none' }}>
+                    <Select
+                      value={it.designerIndex ?? -1}
+                      onChange={(v) => setInits(inits.map((x, j) => (j === i ? { ...x, designerIndex: v < 0 ? null : v } : x)))}
+                      ariaLabel="Designer"
+                      options={[
+                        { value: -1, label: 'Unassigned' },
+                        ...designers.flatMap((d, j) => (d.name.trim() ? [{ value: j, label: d.name, icon: <span className="dot" style={{ background: d.color, width: 10, height: 10 }} /> }] : [])),
+                      ]}
+                    />
+                  </div>
                   <div className="segmented">
                     {SIZES.map((s) => (
                       <button key={s} className={it.size === s ? 'on' : ''} onClick={() => setInits(inits.map((x, j) => (j === i ? { ...x, size: s } : x)))}>{s}</button>

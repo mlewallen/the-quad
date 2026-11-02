@@ -1,4 +1,4 @@
-import type { Designer, ExternalSource, Priority, Project, Schedule, Size, WorkspaceConfig } from '../types';
+import type { Designer, ExternalSource, PhaseStep, Priority, Project, Schedule, Size, WorkspaceConfig } from '../types';
 import { PRIORITIES, SIZES, WEEKS_PER_QUARTER } from '../types';
 import { parseDelimited } from './csv';
 import { utcToAbsWeek } from './quarters';
@@ -39,9 +39,17 @@ export interface ExternalItem {
   goal?: string;
   allocation?: number;
   durationWeeks?: number;
+  /** The tracker's internal id (Jira "Issue id"), which child rows may point at instead of the key. */
+  issueId?: string;
+  /** Parent issue: a key, internal id or summary (Jira "Parent", "Epic Link", "Parent summary"). */
+  parentId?: string;
+  /** Child issues folded under this item by nestChildren; they become its phases. */
+  children?: ExternalItem[];
+  /** Set when an item only stands in for an existing project so its children can update its phases. */
+  childrenOnly?: boolean;
 }
 
-export type ItemField = Exclude<keyof ExternalItem, 'source'>;
+export type ItemField = Exclude<keyof ExternalItem, 'source' | 'children' | 'childrenOnly'>;
 
 export interface ConnectorInfo {
   id: Exclude<ExternalSource, 'paste' | 'sheet'>;
@@ -110,12 +118,15 @@ const FIELD_ALIASES: Record<ItemField, string[]> = {
   goal: ['goal', 'okr', 'objective', 'quarterly goal'],
   allocation: ['allocation', 'alloc', 'percent', '%'],
   durationWeeks: ['duration', 'weeks', 'duration weeks'],
+  issueId: ['issue id'],
+  parentId: ['parent', 'parent id', 'parent key', 'parent issue', 'epic link', 'custom field epic link', 'parent link', 'parent summary'],
 };
 
 export const FIELD_LABELS: Record<ItemField, string> = {
   title: 'Name', externalId: 'Ticket / key', url: 'Link', notes: 'Notes', assignee: 'Designer', assigneeEmail: 'Designer email',
   priority: 'Priority', status: 'Status / phase', size: 'Size or points', workType: 'Work type', start: 'Start date', due: 'Due date',
   area: 'Product area', pm: 'PM', em: 'EM', goal: 'Goal', allocation: 'Allocation %', durationWeeks: 'Duration (weeks)',
+  issueId: 'Issue id', parentId: 'Parent / epic',
 };
 
 const norm = (h: string) => h.toLowerCase().replace(/[^a-z0-9%]+/g, ' ').trim();
@@ -258,6 +269,8 @@ function fromJiraIssue(i: Json): ExternalItem {
   return {
     source: 'jira',
     externalId: str(i.key),
+    issueId: str(i.id),
+    parentId: str((f.parent as Json | undefined)?.key) ?? str(f.customfield_10014),
     url: base && i.key ? `${base}/browse/${i.key}` : undefined,
     title: str(f.summary) ?? str(i.key) ?? '',
     assignee: str(assignee?.displayName),
@@ -412,6 +425,81 @@ function parseDate(v?: string): number | null {
   return Number.isNaN(t) ? null : t;
 }
 
+/* ---------- epics: child issues become phases ---------- */
+
+const low = (s?: string) => (s ?? '').trim().toLowerCase();
+
+/**
+ * Fold child issues under their parent, so an epic and its tasks import as one
+ * project whose phases are the tasks. A child's parent can be another item in
+ * the same import (matched by key, internal id or summary) or a project that's
+ * already here (matched by ticket or tracker id); for the latter a stand-in
+ * item carries the children so the existing project's phases update.
+ */
+export function nestChildren(items: ExternalItem[], projects: Project[] = []): ExternalItem[] {
+  const copies = items.map((i) => ({ ...i, children: undefined as ExternalItem[] | undefined }));
+  const byRef = new Map<string, ExternalItem>();
+  for (const it of copies) for (const ref of [it.externalId, it.issueId, it.title]) if (ref && !byRef.has(low(ref))) byRef.set(low(ref), it);
+  const out: ExternalItem[] = [];
+  const standIns = new Map<string, ExternalItem>();
+  for (const it of copies) {
+    const ref = low(it.parentId);
+    const parent = ref ? byRef.get(ref) : undefined;
+    if (parent && parent !== it && !parent.parentId) {
+      (parent.children ??= []).push(it);
+      continue;
+    }
+    const existing = ref && !parent ? projects.find((p) => low(p.ticket) === ref || low(p.external?.id) === ref) : undefined;
+    if (existing) {
+      let s = standIns.get(existing.id);
+      if (!s) {
+        s = { source: it.source, externalId: existing.ticket || existing.external?.id, title: existing.name, childrenOnly: true, children: [] };
+        standIns.set(existing.id, s);
+        out.push(s);
+      }
+      s.children!.push(it);
+      continue;
+    }
+    out.push(it);
+  }
+  return out;
+}
+
+const IN_FLIGHT = /progress|doing|active|wip|review|approv|sign.?off/i;
+const FINISHED = /done|closed|resolved|complete|shipped/i;
+
+/**
+ * Turn an epic's child issues into a phase plan. Each child is a phase named
+ * after the workspace phase its summary mentions (or its own summary), with its
+ * key as the task. Lengths come from the child's dates or duration; children
+ * without either share what's left of the epic's length, or get two weeks.
+ * The phase of a child that's in progress becomes the current phase.
+ */
+export function phasesFromChildren(children: ExternalItem[], phases: string[], epicWeeks?: number) {
+  const dated = children.map((c, i) => {
+    const s = parseDate(c.start);
+    const d = parseDate(c.due);
+    const weeks = s != null && d != null ? Math.max(1, utcToAbsWeek(d) - utcToAbsWeek(s) + 1) : c.durationWeeks ? Math.max(1, Math.round(c.durationWeeks)) : undefined;
+    return { c, i, startAbs: s != null ? utcToAbsWeek(s) : d != null && weeks ? utcToAbsWeek(d) - weeks + 1 : undefined, weeks };
+  });
+  // Dated children in date order; undated ones keep their import order after them.
+  dated.sort((a, b) => (a.startAbs ?? Infinity) - (b.startAbs ?? Infinity) || a.i - b.i);
+  const known = dated.reduce((a, x) => a + (x.weeks ?? 0), 0);
+  const unknown = dated.filter((x) => x.weeks == null).length;
+  const fill = unknown ? Math.max(1, Math.round(epicWeeks && epicWeeks > known ? (epicWeeks - known) / unknown : 2)) : 0;
+  const nameOf = (title: string) => phases.find((p) => new RegExp(`\\b${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(title)) ?? title.trim();
+  const plan: PhaseStep[] = dated.map((x) => ({ phase: nameOf(x.c.title), weeks: x.weeks ?? fill, ticket: x.c.externalId ?? '' }));
+  const starts = dated.map((x) => x.startAbs).filter((x): x is number => x != null);
+  const live = dated.find((x) => x.c.status && IN_FLIGHT.test(x.c.status) && !FINISHED.test(x.c.status));
+  const allDone = dated.length > 0 && dated.every((x) => x.c.status && FINISHED.test(x.c.status));
+  return {
+    plan,
+    duration: plan.reduce((a, p) => a + p.weeks, 0),
+    startAbs: starts.length ? Math.min(...starts) : undefined,
+    phaseOverride: live ? plan[dated.indexOf(live)].phase : allDone ? plan[plan.length - 1].phase : undefined,
+  };
+}
+
 /* ---------- planning ---------- */
 
 export interface DesignerMatch {
@@ -435,6 +523,7 @@ export function matchDesigner(designers: Designer[], name?: string, email?: stri
 }
 
 export interface PlannedRow {
+  /** The item, with any child issues folded in (see nestChildren). */
   item: ExternalItem;
   action: 'create' | 'update';
   /** Existing project when updating. */
@@ -460,7 +549,7 @@ export function planImport(items: ExternalItem[], ctx: PlanContext): PlannedRow[
   const byName = new Map(ctx.projects.map((p) => [p.name.trim().toLowerCase(), p]));
   const seen = new Set<string>();
 
-  return items.map((item) => {
+  return nestChildren(items, ctx.projects).map((item) => {
     const warnings: string[] = [];
     let existing: Project | undefined;
     let matchedBy: PlannedRow['matchedBy'];
@@ -478,6 +567,7 @@ export function planImport(items: ExternalItem[], ctx: PlanContext): PlannedRow[
     if ((item.assignee || item.assigneeEmail) && !designer.designer) warnings.push(`“${item.assignee ?? item.assigneeEmail}” isn’t on the team, so this goes to the backlog`);
 
     const project: Partial<Project> = {};
+    if (item.childrenOnly) return withChildren({ item, action: 'update', existing, matchedBy, designer: {}, project, schedule: {}, warnings }, ctx);
     if (!existing || existing.name !== item.title) project.name = item.title;
     const priority = normalizePriority(item.priority);
     if (priority) project.priority = priority;
@@ -516,8 +606,24 @@ export function planImport(items: ExternalItem[], ctx: PlanContext): PlannedRow[
       if (dueWeek < 0 || dueWeek > WEEKS_PER_QUARTER * 2) warnings.push('Due date is far outside this quarter');
     }
 
-    return { item, action: existing ? 'update' : 'create', existing, matchedBy, designer, project, schedule, warnings };
-  });
+    if (item.children?.length && !project.epic) project.epic = true;
+    return withChildren({ item, action: existing ? 'update' : 'create', existing, matchedBy, designer, project, schedule, warnings }, ctx);
+  }).filter((r) => !(r.item.childrenOnly && !r.existing));
+}
+
+/** An epic's child issues set its phase plan, its length, and (when the epic has no dates) its start. */
+function withChildren(row: PlannedRow, ctx: PlanContext): PlannedRow {
+  const kids = row.item.children;
+  if (!kids?.length) return row;
+  const s = row.schedule;
+  const ph = phasesFromChildren(kids, ctx.config.phases, s.duration);
+  s.phasePlan = ph.plan;
+  s.duration = ph.duration;
+  if (s.startWeek === undefined && ph.startAbs !== undefined) s.startWeek = ph.startAbs - ctx.quarterStartAbs;
+  // The tasks say where the work is better than the epic's own status does.
+  delete s.phaseOverride;
+  if (ph.phaseOverride) s.phaseOverride = ph.phaseOverride;
+  return row;
 }
 
 /** Example rows for the "try an example" buttons and docs. */
@@ -534,6 +640,18 @@ export const SAMPLES: Record<string, { label: string; text: string; filename?: s
     label: 'Jira CSV export',
     filename: 'jira.csv',
     text: ['Issue key,Summary,Assignee,Priority,Status,Custom field (Story Points),Due date,Component/s', 'DSN-201,Saved payment methods,Maya Chen,High,In Progress,5,2026-12-11,Checkout', 'DSN-202,Admin console IA,,Medium,To Do,8,,Platform', 'DSN-203,Typeahead suggestions,Jordan Lee,Highest,In Review,3,2026-11-27,Search'].join('\n'),
+  },
+  jiraEpics: {
+    label: 'Jira epics with tasks',
+    filename: 'jira-epics.csv',
+    text: [
+      'Issue key,Issue id,Summary,Issue Type,Assignee,Priority,Status,Start date,Due date,Parent',
+      'DSN-300,10300,Notifications inbox,Epic,Maya Chen,High,In Progress,,,',
+      'DSN-301,10301,Discovery: interviews and audit,Task,Maya Chen,High,Done,2026-11-02,2026-11-13,10300',
+      'DSN-302,10302,Concepts for inbox layout,Task,Maya Chen,High,In Progress,2026-11-16,2026-11-27,10300',
+      'DSN-303,10303,Design: final flows,Task,Maya Chen,High,To Do,2026-11-30,2026-12-25,10300',
+      'DSN-304,10304,Handoff and specs,Task,Maya Chen,High,To Do,,,10300',
+    ].join('\n'),
   },
   asana: {
     label: 'Asana JSON',

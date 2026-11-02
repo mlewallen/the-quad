@@ -32,6 +32,8 @@ interface FeedbackState {
   setPaletteOpen(open: boolean): void;
   /** Open importer modal (paste anywhere, file drop, palette). */
   importer: ImporterRequest | null;
+  /** The auto-balance wizard, opened on demand from Backlog, Home or ⌘K. */
+  balancerOpen: boolean;
 }
 
 export const useFeedback = create<FeedbackState>()((set) => ({
@@ -40,7 +42,16 @@ export const useFeedback = create<FeedbackState>()((set) => ({
   paletteOpen: false,
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
   importer: null,
+  balancerOpen: false,
 }));
+
+export function openBalancer() {
+  useFeedback.setState({ balancerOpen: true, paletteOpen: false });
+}
+
+export function closeBalancer() {
+  useFeedback.setState({ balancerOpen: false });
+}
 
 export function openImporter(req: ImporterRequest = {}) {
   useFeedback.setState({ importer: req, paletteOpen: false });

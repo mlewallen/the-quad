@@ -16,6 +16,8 @@ import { useBarDrag } from '../lib/useBarDrag';
 import { useStore } from '../store';
 import { ease, readableOn, staggerChild, staggerParent } from '../lib/motion';
 import { Avatar, barLabel, EmptyState, LoadChip, PriorityChip, TextInput } from '../components/ui';
+import { ColorField } from '../components/inputs';
+import { DESIGNER_COLORS } from '../lib/defaults';
 import { MenuItem, MenuLabel, Popover } from '../components/Popover';
 
 /**
@@ -177,11 +179,18 @@ function DesignerBody({ designer }: { designer: Designer }) {
         animate={{ opacity: 1, y: 0, transition: { duration: 0.3, ease: ease.out } }}
       >
         <div className="row hero-top" style={{ gap: 14, alignItems: 'flex-start' }}>
-          <label className="hero-avatar" style={{ background: designer.color, color: readableOn(designer.color) }} title="Change color">
-            {designer.name.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase()}
-            <input type="color" value={designer.color} onChange={(e) => updateDesigner(designer.id, { color: e.target.value })} aria-label={`Color for ${designer.name}`} />
-            <span className="hero-avatar-edit" aria-hidden><Palette size={11} /></span>
-          </label>
+          <ColorField
+            value={designer.color}
+            swatches={DESIGNER_COLORS}
+            onChange={(c) => updateDesigner(designer.id, { color: c })}
+            ariaLabel={`Color for ${designer.name}`}
+            trigger={({ open, toggle }) => (
+              <button type="button" className="hero-avatar" style={{ background: designer.color, color: readableOn(designer.color) }} title="Change color" aria-label={`Color for ${designer.name}: ${designer.color}`} aria-haspopup="dialog" aria-expanded={open} onClick={toggle}>
+                {designer.name.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase()}
+                <span className="hero-avatar-edit" aria-hidden><Palette size={11} /></span>
+              </button>
+            )}
+          />
           <div className="col" style={{ gap: 4, flex: 1, minWidth: 0 }}>
             <h2 className="hero-name-heading">
               <TextInput className="hero-name" value={designer.name} ariaLabel="Designer name" onCommit={(v) => v.trim() && updateDesigner(designer.id, { name: v.trim() })} />

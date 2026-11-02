@@ -1,4 +1,4 @@
-import type { Curve, Project, Schedule, Size } from '../types';
+import type { Curve, PhaseStep, Project, Schedule, Size } from '../types';
 import { effortWeeks } from './curves';
 import { absWeekToUtc, quarterStartAbsWeek } from './quarters';
 
@@ -65,20 +65,57 @@ export function recommendedDurationForCurve(workType: string, size: Size, alloca
   return flat;
 }
 
-/**
- * The phase a project is in `weeksIn` weeks after it starts, read off
- * phaseBreakdown. Before the start it's the first phase; after the end, the last.
- */
-export function phaseAt(phases: string[], duration: number, weeksIn: number): string {
+/** A schedule's phases with start offsets: its own phase plan, or the default split across its duration. */
+export function phaseSegments(phases: string[], s: Pick<Schedule, 'duration'> & { phasePlan?: PhaseStep[] | null }): { phase: string; start: number; weeks: number; ticket: string }[] {
+  if (!s.phasePlan?.length) return phaseBreakdown(phases, s.duration).map((x) => ({ ...x, ticket: '' }));
+  let cursor = 0;
+  return s.phasePlan.map((p) => {
+    const seg = { phase: p.phase, start: cursor, weeks: p.weeks, ticket: p.ticket };
+    cursor += p.weeks;
+    return seg;
+  });
+}
+
+/** A default phase plan to start editing from: the phaseBreakdown split, rounded to whole weeks. */
+export function defaultPhasePlan(phases: string[], duration: number): PhaseStep[] {
   const segs = phaseBreakdown(phases, duration);
+  const out = segs.map((s) => ({ phase: s.phase, weeks: Math.max(1, Math.round(s.weeks)), ticket: '' }));
+  return fitPhasePlan(out, duration);
+}
+
+/** Stretch or shrink a phase plan to a new total, keeping proportions and at least one week per phase where possible. */
+export function fitPhasePlan(plan: PhaseStep[], duration: number): PhaseStep[] {
+  const total = plan.reduce((a, p) => a + p.weeks, 0);
+  if (!plan.length || total === duration) return plan;
+  const floor = duration >= plan.length ? 1 : 0;
+  const scaled = plan.map((p) => ({ ...p, weeks: Math.max(floor, Math.round((p.weeks / (total || 1)) * duration)) }));
+  // Rounding can leave a remainder; settle it on the longest phases first.
+  let diff = duration - scaled.reduce((a, p) => a + p.weeks, 0);
+  const order = scaled.map((_, i) => i).sort((a, b) => scaled[b].weeks - scaled[a].weeks);
+  for (let k = 0; diff !== 0 && k < order.length * 4; k++) {
+    const p = scaled[order[k % order.length]];
+    const step = diff > 0 ? 1 : -1;
+    if (step < 0 && p.weeks <= floor) continue;
+    p.weeks += step;
+    diff -= step;
+  }
+  return scaled;
+}
+
+/**
+ * The phase a project is in `weeksIn` weeks after it starts, read off its
+ * phase plan (or phaseBreakdown). Before the start it's the first phase; after the end, the last.
+ */
+export function phaseAt(phases: string[], duration: number, weeksIn: number, phasePlan?: PhaseStep[] | null): string {
+  const segs = phaseSegments(phases, { duration, phasePlan }).filter((s) => s.weeks > 0);
   if (!segs.length) return '';
   if (weeksIn < 0) return segs[0].phase;
   return segs.find((s) => weeksIn < s.start + s.weeks)?.phase ?? segs[segs.length - 1].phase;
 }
 
 /** The phase to show for a schedule: a manual override wins, otherwise it follows the schedule. */
-export function currentPhase(phases: string[], s: Pick<Schedule, 'duration' | 'phaseOverride'>, weeksIn: number): string {
-  return s.phaseOverride || phaseAt(phases, s.duration, weeksIn);
+export function currentPhase(phases: string[], s: Pick<Schedule, 'duration' | 'phaseOverride'> & { phasePlan?: PhaseStep[] | null }, weeksIn: number): string {
+  return s.phaseOverride || phaseAt(phases, s.duration, weeksIn, s.phasePlan);
 }
 
 const WEEK_MS = 7 * 86_400_000;

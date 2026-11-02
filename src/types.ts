@@ -53,6 +53,12 @@ export interface Project {
   quarter: number | null;
   /** Order within the unscheduled backlog (lower is higher); null once it's planned into a quarter. */
   backlogRank: number | null;
+  /**
+   * The plan for unscheduled work (designer, length, phases, milestones), kept on
+   * the project until it's planned into a quarter. startWeek is relative to that
+   * quarter's start. Null for projects that are in a quarter.
+   */
+  draft: Schedule | null;
   name: string;
   ticket: string;
   reference: string;
@@ -84,12 +90,28 @@ export interface ExternalRef {
   syncedAt: number;
 }
 
+/** 'deliver': the designer owes this. 'input': the designer reviews or advises (a PM or eng milestone they feed into). */
+export type MilestoneKind = 'deliver' | 'input';
+
 export interface Milestone {
   id: ID;
   type: string;
   /** Weeks from the project's start week (fractional allowed). */
   offset: number;
   note: string;
+  kind: MilestoneKind;
+}
+
+/**
+ * One phase of a project's plan, in order. Phases run back to back, so each
+ * starts where the previous one ends. Think of the project as a Jira epic and
+ * each phase as the task (or story) the designer works under it.
+ */
+export interface PhaseStep {
+  phase: string;
+  weeks: number;
+  /** Tracker key for the phase's task, e.g. DSN-142. */
+  ticket: string;
 }
 
 export interface Curve {
@@ -107,6 +129,8 @@ export interface Schedule {
    * (see currentPhase in lib/sizing.ts).
    */
   phaseOverride: string | null;
+  /** Planned phases and their lengths; null means the default split from phaseBreakdown. Sums to `duration`. */
+  phasePlan: PhaseStep[] | null;
   /** Week offset relative to the project's quarter start (may be negative or >12). */
   startWeek: number;
   duration: number;

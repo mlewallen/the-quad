@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowRight, ChevronLeft, ChevronRight, Copy, FileText, Moon, PanelLeftClose, Plus, Search, Settings, Sparkles, Upload } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, Copy, FileText, Moon, PanelLeftClose, Plus, Search, Settings, Sparkles, Upload, Wand2 } from 'lucide-react';
 import { useStore } from '../store';
-import { navigate, openDesigner, openProject, useActivePlan, useDesignerMap, useDesigners, useEntries, useWorkspace, VIEWS } from '../hooks';
-import { openImporter, toast, useFeedback } from '../feedback';
+import { navigate, openDesigner, openProject, openProjectPage, useActivePlan, useDesignerMap, useDesigners, useEntries, useWorkspace, VIEWS } from '../hooks';
+import { openBalancer, openImporter, toast, useFeedback } from '../feedback';
+import { quarterLabel } from '../lib/quarters';
 import { dialogIn } from '../lib/motion';
 import { VIEW_ICONS } from './Shell';
 
@@ -47,6 +48,9 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const designers = useDesigners();
   const workspace = useWorkspace()!;
   const s = useStore.getState();
+  const projects = useStore((st) => st.projects);
+  const quarter = useStore((st) => st.currentQuarter);
+  const elsewhere = useMemo(() => projects.filter((p) => p.workspaceId === workspace.id && p.quarter !== quarter), [projects, workspace.id, quarter]);
 
   const commands = useMemo<Command[]>(() => {
     const label = workspace.config.labels.initiative;
@@ -72,6 +76,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       { id: 'theme', group: 'Actions', label: 'Toggle dark mode', icon: <Moon size={16} />, keywords: 'theme light', run: () => s.updateSettings({ theme: document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark' }) },
       { id: 'sidebar', group: 'Actions', label: 'Toggle sidebar', hint: '[', icon: <PanelLeftClose size={16} />, run: () => s.updateSettings({ sidebarCollapsed: !useStore.getState().settings.sidebarCollapsed }) },
       { id: 'demo', group: 'Actions', label: 'Load demo team (10 designers)', icon: <Sparkles size={16} />, keywords: 'sample example data stress', run: () => { s.loadDemo(); navigate({ view: 'home', designer: null }); toast('Demo workspace loaded', { tone: 'success' }); } },
+      { id: 'balance', group: 'Actions', label: 'Auto-balance unassigned work…', icon: <Wand2 size={16} />, keywords: 'balancer assign wizard backlog', run: () => { navigate({ view: 'backlog', project: null, page: false, designer: null }); openBalancer(); } },
       { id: 'import', group: 'Actions', label: 'Add many projects (paste or import)', icon: <Upload size={16} />, keywords: 'csv sheets jira asana servicenow linear paste bulk', run: () => openImporter() },
       { id: 'import-jira', group: 'Actions', label: 'Import from Jira, Asana or ServiceNow', icon: <Upload size={16} />, keywords: 'integration tracker export', run: () => openImporter({ tab: 'trackers' }) },
       { id: 'settings', group: 'Actions', label: 'Open settings', icon: <Settings size={16} />, run: () => navigate({ settings: 'appearance' }) },
@@ -84,8 +89,18 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
         keywords: `${e.project.ticket} ${e.project.productArea}`,
         run: () => openProject(e.project.id),
       })),
+      // Backlog and later-quarter work opens straight into its plan page.
+      ...elsewhere.map((p) => ({
+        id: `p:${p.id}`,
+        group: workspace.config.labels.initiatives,
+        label: p.name,
+        hint: p.quarter == null ? 'Unscheduled' : quarterLabel(p.quarter),
+        icon: <FileText size={16} />,
+        keywords: `${p.ticket} ${p.productArea} backlog plan`,
+        run: () => openProjectPage(p.id),
+      })),
     ];
-  }, [entries, dmap, plan, workspace, s, designers]);
+  }, [entries, elsewhere, dmap, plan, workspace, s, designers]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

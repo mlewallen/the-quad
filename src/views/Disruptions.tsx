@@ -11,6 +11,7 @@ import { formatWeekRange } from '../lib/quarters';
 import { WeekPicker } from '../components/WeekPicker';
 import CurveEditor from '../components/CurveEditor';
 import { Avatar, EmptyState, Field, Slider, TextInput } from '../components/ui';
+import { Checkbox, NumberField, Select } from '../components/inputs';
 
 export default function Disruptions() {
   const designers = useDesigners();
@@ -96,10 +97,13 @@ function DisruptionEditor({ d, onDone }: { d: Disruption; onDone: () => void }) 
     >
       <div className="grid2">
         <Field label="Type">
-          <select className="select sm" value={d.type} onChange={(e) => up({ type: e.target.value })}>
-            {!workspace.config.disruptionTypes.includes(d.type) && <option>{d.type}</option>}
-            {workspace.config.disruptionTypes.map((t) => <option key={t}>{t}</option>)}
-          </select>
+          <Select
+            size="sm"
+            value={d.type}
+            onChange={(v) => up({ type: v })}
+            ariaLabel="Type"
+            options={[...(workspace.config.disruptionTypes.includes(d.type) ? [] : [d.type]), ...workspace.config.disruptionTypes].map((t) => ({ value: t, label: t }))}
+          />
         </Field>
         <Field label="Label">
           <TextInput className="input sm" value={d.label} onCommit={(v) => up({ label: v })} placeholder="Optional" />
@@ -108,7 +112,7 @@ function DisruptionEditor({ d, onDone }: { d: Disruption; onDone: () => void }) 
           <WeekPicker size="sm" value={d.startAbsWeek} onChange={(w) => up({ startAbsWeek: w })} ariaLabel="Start week" />
         </Field>
         <Field label="Duration (weeks)">
-          <input className="input sm" type="number" min={1} max={52} value={d.duration} onChange={(e) => up({ duration: Math.max(1, Number(e.target.value) || 1) })} />
+          <NumberField size="sm" value={d.duration} min={1} max={52} onChange={(v) => up({ duration: v })} ariaLabel="Duration in weeks" />
         </Field>
       </div>
       <div className="field">
@@ -120,17 +124,17 @@ function DisruptionEditor({ d, onDone }: { d: Disruption; onDone: () => void }) 
       <Field label="Applies to">
         <div className="row" style={{ flexWrap: 'wrap' }}>
           {designers.map((x) => (
-            <label key={x.id} className="row small" style={{ gap: 4 }}>
-              <input
-                type="checkbox"
-                checked={d.designerIds.includes(x.id)}
-                onChange={(e) => {
-                  const ids = e.target.checked ? [...d.designerIds, x.id] : d.designerIds.filter((i) => i !== x.id);
-                  if (ids.length) up({ designerIds: ids });
-                }}
-              />
+            <Checkbox
+              key={x.id}
+              className="small"
+              checked={d.designerIds.includes(x.id)}
+              onChange={(on) => {
+                const ids = on ? [...d.designerIds, x.id] : d.designerIds.filter((i) => i !== x.id);
+                if (ids.length) up({ designerIds: ids });
+              }}
+            >
               {x.name}
-            </label>
+            </Checkbox>
           ))}
         </div>
       </Field>
