@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { motion } from 'motion/react';
 import {
-  AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, CalendarRange, Diamond, Flag, Layers, ListChecks, Plus, RotateCcw, Users, X,
+  AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, CalendarRange, Diamond, Flag, Gauge, Layers, ListChecks, Plus, RotateCcw, Users, WandSparkles, X,
 } from 'lucide-react';
 import { uid, useStore } from '../store';
 import {
@@ -10,13 +10,15 @@ import {
 import type { Milestone, MilestoneKind, PhaseStep, Project } from '../types';
 import { PRIORITIES, SIZES, WEEKS_PER_QUARTER } from '../types';
 import { computeLoad } from '../lib/capacity';
-import { effortWeeks } from '../lib/curves';
+import { CURVE_LABELS, effortWeeks, weeklyAllocation } from '../lib/curves';
+import { PAIR_SHARE } from '../lib/capacity';
 import { ease, readableOn, staggerChild, staggerParent } from '../lib/motion';
 import { formatAbsWeek, formatWeekRange, quarterLabel, quarterStartAbsWeek, utcToAbsWeek } from '../lib/quarters';
 import { defaultPhasePlan, effortFor, gaSlipWeeks, phaseSegments, recommendedDurationForCurve, weeksIntoSchedule, currentPhase } from '../lib/sizing';
 import { toast } from '../feedback';
 import { WeekPicker } from '../components/WeekPicker';
 import { LoadChart } from '../components/ProjectDetail';
+import CurveEditor from '../components/CurveEditor';
 import { Checkbox, NumberField, Select } from '../components/inputs';
 import { DesignerSelect, EmptyState, Field, PriorityChip, Slider, TextInput } from '../components/ui';
 
@@ -52,11 +54,11 @@ export default function ProjectView({ id }: { id: string }) {
       <div className="pv-grid">
         <div className="col" style={{ gap: 16, minWidth: 0 }}>
           <PhaseTimeline plan={plan} />
+          <Allocation plan={plan} />
           <Milestones plan={plan} />
         </div>
         <motion.aside className="col" style={{ gap: 16, minWidth: 0 }} variants={staggerParent} initial="initial" animate="animate">
           <People plan={plan} />
-          <DesignerLoad plan={plan} />
           <Context project={plan.project} />
         </motion.aside>
       </div>
@@ -417,20 +419,15 @@ function People({ plan }: { plan: ProjectPlan }) {
   const designers = useDesigners();
   const labels = useWorkspace()!.config.labels;
   const up = (patch: Partial<Project>) => useStore.getState().updateProject(p.id, patch);
-  const dmap = useDesignerMap();
   return (
     <motion.section className="card card-pad col" style={{ gap: 12 }} variants={staggerChild}>
-      <div className="row"><Users size={16} style={{ color: 'var(--accent)' }} aria-hidden /><h2>People and effort</h2></div>
+      <div className="row"><Users size={16} style={{ color: 'var(--accent)' }} aria-hidden /><h2>People</h2></div>
       <Field label="Designer">
         <DesignerSelect designers={designers} value={s.designerId} onChange={(v) => update({ designerId: v })} ariaLabel="Designer" />
       </Field>
       <Field label="Pair designer">
         <DesignerSelect designers={designers.filter((d) => d.id !== s.designerId)} value={s.pairDesignerId} onChange={(v) => update({ pairDesignerId: v })} noneLabel="None" ariaLabel="Pair designer" />
       </Field>
-      <div className="field">
-        <div className="row"><label className="label">Max allocation</label><span className="spacer" /><b className="num">{s.allocation}%</b></div>
-        <Slider value={s.allocation} min={5} max={100} step={5} onChange={(v) => update({ allocation: v })} ariaLabel="Max allocation" format={(v) => `${v}%`} color={s.designerId ? dmap[s.designerId]?.color : undefined} marks={[50]} />
-      </div>
       <Checkbox className="small" checked={s.confirmed} disabled={!s.designerId} onChange={(v) => update({ confirmed: v })}>
         Confirmed with the designer {!s.designerId && <span className="faint">(assign first)</span>}
       </Checkbox>
@@ -442,29 +439,109 @@ function People({ plan }: { plan: ProjectPlan }) {
   );
 }
 
-function DesignerLoad({ plan }: { plan: ProjectPlan }) {
-  const { project: p, schedule: s, startAbs } = plan;
+/* ---------- allocation and effort ---------- */
+
+/**
+ * How much of the designer's week this takes, week by week, and whether that
+ * adds up: the curve, the size-based recommendation (with one-click apply),
+ * planned against expected effort, and the load it puts on the designer and
+ * any pair over the project's window.
+ */
+function Allocation({ plan }: { plan: ProjectPlan }) {
+  const { project: p, schedule: s, startAbs, update } = plan;
+  const workspace = useWorkspace()!;
   const dmap = useDesignerMap();
   const entries = useWorkspaceEntries();
   const disruptions = useWorkspaceDisruptions();
   const sm = useStore((st) => st.settings.fiscalStartMonth);
   const designer = s.designerId ? dmap[s.designerId] : undefined;
-  const weeks = useMemo(
-    () => (designer && startAbs != null ? computeLoad(entries, disruptions, [designer.id], startAbs, s.duration, sm)[designer.id] : null),
-    [designer, startAbs, entries, disruptions, s.duration, sm],
+  const pair = s.pairDesignerId ? dmap[s.pairDesignerId] : undefined;
+  const color = designer?.color ?? 'var(--accent)';
+
+  const recommended = recommendedDurationForCurve(p.workType, p.size, s.allocation, s.curve);
+  const delta = s.duration - recommended;
+  const expected = effortFor(p.workType, p.size);
+  const planned = effortWeeks(s.curve, s.duration, s.allocation);
+  const weekly = weeklyAllocation(s.curve, s.duration, s.allocation);
+  const peak = Math.max(0, ...weekly);
+  const coverage = expected ? planned / expected : 1;
+
+  const ids = [designer?.id, pair?.id].filter((x): x is string => !!x);
+  const load = useMemo(
+    () => (ids.length && startAbs != null ? computeLoad(entries, disruptions, ids, startAbs, s.duration, sm) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ids.join(), startAbs, entries, disruptions, s.duration, sm],
   );
-  const over = weeks?.filter((w) => w.total > 100.5).length ?? 0;
+  const overOf = (id: string) => load?.[id]?.filter((w) => w.total > 100.5).length ?? 0;
+
+  const apply = () => {
+    const before = s.duration;
+    update({ duration: recommended });
+    toast(`Length set to ${recommended} weeks`, { tone: 'success', action: { label: 'Undo', run: () => update({ duration: before }) } });
+  };
+
   return (
-    <motion.section className="card card-pad col" style={{ gap: 8 }} variants={staggerChild}>
-      <div className="row">
-        <h2>{designer ? `${designer.name}’s load` : 'Designer load'}</h2>
-        <span className="spacer" />
-        {over > 0 && <span className="chip over">{over} wk{over > 1 ? 's' : ''} over</span>}
+    <section className="card">
+      <div className="panel-head">
+        <span className="panel-icon"><Gauge size={15} /></span>
+        <div className="col" style={{ gap: 0, flex: 1, minWidth: 0 }}>
+          <h2>Allocation and effort</h2>
+          <span className="tiny faint">How much of {designer ? `${designer.name}’s` : 'the designer’s'} week this takes, week by week, and whether it adds up.</span>
+        </div>
       </div>
-      {!designer && <p className="small faint" style={{ margin: 0 }}>Pick a designer to see how this fits their other work.</p>}
-      {designer && startAbs == null && <p className="small faint" style={{ margin: 0 }}>Plan it into a quarter to check it against {designer.name}’s other work.</p>}
-      {designer && weeks && <LoadChart weeks={weeks} thisWeekly={[]} projectId={p.id} color={designer.color} startWeek={s.startWeek} />}
-    </motion.section>
+      <div className="pv-alloc">
+        <div className="col" style={{ gap: 12, minWidth: 0 }}>
+          <div className="field">
+            <div className="row"><span className="label">Max allocation</span><span className="spacer" /><b className="num">{s.allocation}%</b></div>
+            <Slider value={s.allocation} min={5} max={100} step={5} onChange={(v) => update({ allocation: v })} ariaLabel="Max allocation" format={(v) => `${v}%`} color={designer?.color} marks={[50]} />
+          </div>
+          <CurveEditor curve={s.curve} duration={s.duration} max={s.allocation} color={color} phases={phaseSegments(workspace.config.phases, s)} onChange={(curve) => update({ curve })} />
+        </div>
+
+        <div className="col" style={{ gap: 12, minWidth: 0 }}>
+          <div className="intel">
+            <div>
+              <div className="tiny muted">Recommended length</div>
+              <div className="big">{recommended} wks</div>
+            </div>
+            <div className="small muted" style={{ flex: 1 }}>
+              {p.size} {p.workType} ≈ {expected} effort weeks at {s.allocation}%{s.curve.shape !== 'flat' ? ` (shape: ${CURVE_LABELS[s.curve.shape].toLowerCase()})` : ''}.
+              {delta === 0 ? ' The plan matches.' : delta > 0 ? ` The plan is ${delta} wk${delta > 1 ? 's' : ''} longer.` : ` The plan is ${-delta} wk${delta < -1 ? 's' : ''} shorter, so it’s likely under-resourced.`}
+            </div>
+            {delta !== 0 && <button className="btn sm primary" onClick={apply}><WandSparkles size={14} /> Apply</button>}
+          </div>
+          <div className="pv-alloc-stats">
+            <div className={`kpi ${coverage < 0.95 ? 'warn' : ''}`}>
+              <span className="kpi-label">Effort planned</span>
+              <span className="kpi-value">{planned.toFixed(1)} wks</span>
+              <span className="tiny faint">{Math.round(coverage * 100)}% of the {expected} expected</span>
+            </div>
+            <div className="kpi">
+              <span className="kpi-label">Peak week</span>
+              <span className="kpi-value">{Math.round(peak)}%</span>
+              <span className="tiny faint">{CURVE_LABELS[s.curve.shape]}{pair ? ` · ${pair.name} at ${Math.round(peak * PAIR_SHARE)}%` : ''}</span>
+            </div>
+          </div>
+
+          {!designer && <p className="small faint" style={{ margin: 0 }}>Pick a designer to see how this fits their other work.</p>}
+          {designer && startAbs == null && <p className="small faint" style={{ margin: 0 }}>Plan it into a quarter to check it against {designer.name}’s other work.</p>}
+          {load && [designer, pair].filter((d): d is NonNullable<typeof d> => !!d).map((d) => {
+            const over = overOf(d.id);
+            const share = d === pair ? weekly.map((v) => v * PAIR_SHARE) : weekly;
+            return (
+              <div key={d.id} className="col" style={{ gap: 4 }}>
+                <div className="row">
+                  <span className="label">{d.name}’s load{d === pair ? ' (pairing)' : ''}</span>
+                  <span className="spacer" />
+                  {over > 0 ? <span className="chip over">{over} wk{over > 1 ? 's' : ''} over 100%</span> : <span className="chip ok">Fits</span>}
+                </div>
+                <LoadChart weeks={load[d.id]} thisWeekly={share} projectId={p.id} color={d.color} startWeek={s.startWeek} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
   );
 }
 
