@@ -560,9 +560,9 @@ table.data td.check, table.data th.check { width: 32px; padding-right: 0; }
   background: var(--surface); border: 1px solid var(--accent-line); border-radius: var(--r-md); box-shadow: var(--shadow-2);
 }
 .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-.filters .search { position: relative; width: 220px; }
-.filters .search svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--text-3); pointer-events: none; }
-.filters .search .input { padding-left: 30px; }
+.filters .search, .board-bar .search { position: relative; width: 220px; }
+.filters .search svg, .board-bar .search svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--text-3); pointer-events: none; }
+.filters .search .input, .board-bar .search .input { padding-left: 30px; }
 .filters .select { width: auto; }
 
 /* =========================================================================
@@ -761,6 +761,54 @@ table.data td.check, table.data th.check { width: 32px; padding-right: 0; }
 .team-project:hover { color: var(--accent); }
 .backlog-grid { align-items: start; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); }
 .list-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border); }
+/* Backlog horizon board (views/Backlog.tsx) */
+.board-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.board-search { width: 260px; }
+.board { display: grid; grid-template-columns: repeat(4, minmax(240px, 1fr)); gap: 12px; align-items: start; }
+.board.single { grid-template-columns: minmax(0, 1fr); }
+.board-lane-switch { width: 100%; margin-bottom: 12px; display: grid; grid-template-columns: repeat(4, 1fr); }
+.board-lane-switch button { justify-content: center; }
+.board:not(.single) .lane { max-height: calc(100vh / var(--ui-scale, 1) - 150px); }
+.board:not(.single) .lane-cards { overflow-y: auto; margin: 0 -6px; padding: 2px 6px 6px; overscroll-behavior: contain; }
+.lane { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; transition: border-color 0.15s, background 0.15s; }
+.lane.drop { border-color: var(--accent); background: var(--accent-softer); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.lane-head { display: flex; flex-direction: column; gap: 8px; padding: 2px 2px 4px; }
+.lane-title { font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.lane-count { font-size: 11px; font-weight: 600; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 9px; display: inline-grid; place-items: center; background: var(--surface-3); color: var(--text-2); }
+.lane-meter { display: flex; flex-direction: column; gap: 4px; color: var(--text-2); }
+.lane-meter-bar { height: 6px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+.lane-meter-bar span { display: block; height: 100%; border-radius: 3px; background: var(--ok); transition: width 0.4s var(--ease-out); }
+.lane-meter.warn .lane-meter-bar span { background: var(--warn-bar); }
+.lane-meter.over .lane-meter-bar span { background: var(--over); }
+.lane-gap { color: var(--over-text); font-weight: 600; }
+.lane-add .input { flex: 1; }
+.lane-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.lane-subhead { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-3); padding: 6px 2px 2px; }
+.lane-cards li:first-child .lane-subhead { padding-top: 0; }
+.lane-empty { margin: 4px 2px 8px; }
+.bcard {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 10px 10px 12px; display: flex; flex-direction: column; gap: 6px;
+  box-shadow: var(--shadow-1); position: relative; cursor: grab; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.bcard::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 2px 2px 0; background: var(--border-strong); }
+.bcard.pri-p0::before { background: var(--over); }
+.bcard.pri-p1::before { background: var(--warn-bar); }
+.bcard:hover { border-color: var(--border-strong); box-shadow: var(--shadow-2); }
+.bcard:active { cursor: grabbing; }
+.bcard-top { gap: 6px; min-height: 24px; }
+.bcard-rank { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 700; background: var(--surface-3); color: var(--text-2); flex: none; }
+.bcard-rankctl { opacity: 0.55; transition: opacity 0.15s; }
+.bcard:hover .bcard-rankctl, .bcard-rankctl:focus-within { opacity: 1; }
+.bcard-name { font-weight: 600; font-size: 13px; color: var(--text); line-height: 1.35; }
+.bcard-name:hover { color: var(--accent); }
+.bcard-meta { line-height: 1.4; }
+.bcard-ready { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.bcard-ready li { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px 0 5px; border-radius: 11px; font-size: 11px; background: var(--surface-2); color: var(--text-3); border: 1px dashed var(--border-strong); }
+.bcard-ready li.on { border-style: solid; border-color: var(--border); color: var(--text-2); }
+.bcard-ready li.gap { padding: 0; width: 22px; justify-content: center; }
+.bcard-ready li.over { background: var(--over-soft); border-color: transparent; color: var(--over-text); }
+.bcard-ready .avatar { width: 16px; height: 16px; font-size: 8px; }
+@container shell (max-width: 1180px) { .board:not(.single) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .backlog-rank { list-style: none; margin: 0; padding: 0; }
 .backlog-col { gap: 16px; max-width: 1100px; }
 .backlog-list { padding: 0 16px 12px; }
@@ -1166,6 +1214,10 @@ a.kpi-link:hover .kpi-label { color: var(--accent); }
 .m-topbar, .tabbar { display: none; }
 
 @media (max-width: 720px) {
+  .board-bar .board-search { width: 100%; }
+  .board-bar .btn.primary { margin-left: auto; }
+  .bcard .btn.icon.sm { width: 36px; height: 36px; }
+  .bcard-rankctl { opacity: 1; }
   html, body { overscroll-behavior: none; }
   body { -webkit-tap-highlight-color: transparent; }
   /* iOS zooms into fields with text under 16px. */
